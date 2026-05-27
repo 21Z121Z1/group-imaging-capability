@@ -43,8 +43,8 @@ import com.oplus.groupimaging.domain.ScanJob
 import com.oplus.groupimaging.domain.ScanStatus
 import com.oplus.groupimaging.domain.ScanType
 import com.oplus.groupimaging.domain.repository.OplusInsightRepository
+import com.oplus.groupimaging.core.sha256Hex
 import java.io.File
-import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -717,11 +717,6 @@ class GroupImagingRepository @Inject constructor(
         val scopeHash = sha256Hex(rootsJson)
         return ScanScope(roots, rootsJson, scopeHash)
     }
-
-    private fun sha256Hex(value: String): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray())
-            .joinToString(separator = "") { byte -> "%02x".format(byte) }
 
     private fun List<CaptureSession>.groupCount(selector: (CaptureSession) -> String): List<InsightBucket> =
         groupBy(selector).map { InsightBucket(it.key, it.value.size) }.sortedByDescending { it.count }

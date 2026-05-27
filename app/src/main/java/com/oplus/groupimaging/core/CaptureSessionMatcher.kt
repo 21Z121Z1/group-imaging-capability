@@ -10,6 +10,7 @@ class CaptureSessionMatcher @Inject constructor() {
     fun buildSessions(assets: List<MediaAsset>): Pair<List<CaptureSession>, List<MediaAsset>> {
         val sorted = assets.sortedBy { it.createdAt }
         val updated = sorted.toMutableList()
+        val updatedIndexByAssetId = sorted.indices.associateBy { sorted[it].assetId }.toMutableMap()
         val sessions = mutableListOf<CaptureSession>()
         val consumedRaw = mutableSetOf<String>()
 
@@ -39,7 +40,7 @@ class CaptureSessionMatcher @Inject constructor() {
             updated[index] = asset.copy(pairedCaptureId = captureId)
             if (rawMatch != null) {
                 consumedRaw += rawMatch.assetId
-                val rawIndex = updated.indexOfFirst { it.assetId == rawMatch.assetId }
+                val rawIndex = updatedIndexByAssetId[rawMatch.assetId] ?: -1
                 if (rawIndex >= 0) {
                     updated[rawIndex] = rawMatch.copy(
                         pairedCaptureId = captureId,
@@ -63,7 +64,7 @@ class CaptureSessionMatcher @Inject constructor() {
                 isRawCapture = true,
                 captureModeLabel = asset.captureModeLabel,
             )
-            val rawIndex = updated.indexOfFirst { it.assetId == asset.assetId }
+            val rawIndex = updatedIndexByAssetId[asset.assetId] ?: -1
             if (rawIndex >= 0) {
                 updated[rawIndex] = asset.copy(pairedCaptureId = captureId)
             }
@@ -71,9 +72,13 @@ class CaptureSessionMatcher @Inject constructor() {
         return sessions to updated
     }
 
+    private companion object {
+        val RAW_JPG_SUFFIX = Regex("(_RAW|_JPG)$")
+    }
+
     private fun stemsMatch(left: String, right: String): Boolean {
-        val leftStem = left.substringBeforeLast('.').replace(Regex("(_RAW|_JPG)$"), "")
-        val rightStem = right.substringBeforeLast('.').replace(Regex("(_RAW|_JPG)$"), "")
+        val leftStem = left.substringBeforeLast('.').replace(RAW_JPG_SUFFIX, "")
+        val rightStem = right.substringBeforeLast('.').replace(RAW_JPG_SUFFIX, "")
         return leftStem == rightStem
     }
 }

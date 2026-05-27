@@ -5,7 +5,6 @@ import com.oplus.groupimaging.domain.DeviceProfile
 import com.oplus.groupimaging.domain.LensClass
 import com.oplus.groupimaging.domain.MediaAsset
 import com.oplus.groupimaging.domain.ParseStatus
-import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
 
@@ -68,11 +67,6 @@ class OplusClassifier(
             contentSignature = signature,
         )
     }
-
-    private fun sha256Hex(value: String): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray())
-            .joinToString(separator = "") { byte -> "%02x".format(byte) }
 
     private fun resolveLens(deviceModel: String?, focalEq: Int?): LensClass {
         val value = focalEq ?: return LensClass.UNKNOWN
