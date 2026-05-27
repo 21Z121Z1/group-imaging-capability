@@ -14,13 +14,15 @@ class CaptureSessionMatcher @Inject constructor() {
         val sessions = mutableListOf<CaptureSession>()
         val consumedRaw = mutableSetOf<String>()
 
+        val rawByDevicePath = sorted
+            .filter { it.isRaw }
+            .groupBy { "${it.deviceModel}:${it.relativePath}" }
+
         sorted.forEachIndexed { index, asset ->
             if (asset.isRaw || consumedRaw.contains(asset.assetId)) return@forEachIndexed
-            val rawMatch = sorted.firstOrNull { candidate ->
-                candidate.isRaw &&
-                    !consumedRaw.contains(candidate.assetId) &&
-                    candidate.deviceModel == asset.deviceModel &&
-                    candidate.relativePath == asset.relativePath &&
+            val key = "${asset.deviceModel}:${asset.relativePath}"
+            val rawMatch = rawByDevicePath[key]?.firstOrNull { candidate ->
+                !consumedRaw.contains(candidate.assetId) &&
                     stemsMatch(candidate.fileName, asset.fileName) &&
                     abs(candidate.createdAt - asset.createdAt) <= 2_000L
             }

@@ -70,10 +70,10 @@ class OplusClassifier(
 
     private fun resolveLens(deviceModel: String?, focalEq: Int?): LensClass {
         val value = focalEq ?: return LensClass.UNKNOWN
+        val modelLower = deviceModel?.lowercase(Locale.ROOT).orEmpty()
         val profile = profiles.firstOrNull { profile ->
-            val model = deviceModel?.lowercase(Locale.ROOT).orEmpty()
-            profile.deviceModel.lowercase(Locale.ROOT) == model ||
-                profile.aliases.any { it.lowercase(Locale.ROOT) == model }
+            profile.deviceModel.lowercase(Locale.ROOT) == modelLower ||
+                profile.aliases.any { it.lowercase(Locale.ROOT) == modelLower }
         }
         val range = profile?.focalEqRanges?.firstOrNull { value in it.minInclusive..it.maxInclusive }
         return range?.lensClass ?: when {

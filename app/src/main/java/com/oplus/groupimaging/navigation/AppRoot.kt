@@ -267,12 +267,12 @@ private fun nullableMoveProgressUiStateSaver(): Saver<MoveProgressUiState?, Map<
                 null
             } else {
                 MoveProgressUiState(
-                    progress = saved.getValue("progress") as Float,
-                    movedCount = saved.getValue("movedCount") as Int,
-                    failedCount = saved.getValue("failedCount") as Int,
-                    totalCount = saved.getValue("totalCount") as Int,
-                    currentFileName = saved["currentFileName"] as String?,
-                    isCompleted = saved.getValue("isCompleted") as Boolean,
+                    progress = (saved["progress"] as? Number)?.toFloat() ?: 0f,
+                    movedCount = (saved["movedCount"] as? Number)?.toInt() ?: 0,
+                    failedCount = (saved["failedCount"] as? Number)?.toInt() ?: 0,
+                    totalCount = (saved["totalCount"] as? Number)?.toInt() ?: 0,
+                    currentFileName = saved["currentFileName"] as? String,
+                    isCompleted = saved["isCompleted"] as? Boolean ?: false,
                 )
             }
         },

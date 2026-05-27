@@ -53,6 +53,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.LocalDate
 import java.time.YearMonth
 import javax.inject.Inject
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 data class FocalRangeUi(val label: String)
 
@@ -183,13 +185,19 @@ class InsightViewModel @Inject constructor(
             updateState { copy(isLoading = true) }
             val filterSpec = currentState().filters.toFilterSpec()
             runCatching {
-                val lens = observeInsight(InsightDimension.LENS, filterSpec)
-                val focal = observeInsight(InsightDimension.FOCAL_EQ, filterSpec)
-                val live = observeInsight(InsightDimension.LIVE, filterSpec)
-                val raw = observeInsight(InsightDimension.RAW, filterSpec)
-                val device = observeInsight(InsightDimension.DEVICE, filterSpec)
-                val monthly = observeInsight(InsightDimension.MONTH, filterSpec)
-                val yearly = observeInsight(InsightDimension.YEAR, filterSpec)
+                val results = coroutineScope {
+                    val deferred = InsightDimension.entries.associateWith { dim ->
+                        async { observeInsight(dim, filterSpec) }
+                    }
+                    deferred.mapValues { it.value.await() }
+                }
+                val lens = results[InsightDimension.LENS].orEmpty()
+                val focal = results[InsightDimension.FOCAL_EQ].orEmpty()
+                val live = results[InsightDimension.LIVE].orEmpty()
+                val raw = results[InsightDimension.RAW].orEmpty()
+                val device = results[InsightDimension.DEVICE].orEmpty()
+                val monthly = results[InsightDimension.MONTH].orEmpty()
+                val yearly = results[InsightDimension.YEAR].orEmpty()
                 updateState {
                     copy(
                         isLoading = false,
