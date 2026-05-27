@@ -2,6 +2,7 @@ package com.oplus.groupimaging.core
 
 import com.oplus.groupimaging.domain.CapturePairStatus
 import com.oplus.groupimaging.domain.DeviceProfile
+import FocalEqRange
 import com.oplus.groupimaging.domain.LensClass
 import com.oplus.groupimaging.domain.MediaAsset
 import com.oplus.groupimaging.domain.ParseStatus
@@ -85,26 +86,24 @@ class OplusClassifier(
     }
 }
 
+private val defaultFocalEqRanges = listOf(
+    FocalEqRange("0-18mm", 0, 18, LensClass.ULTRA_WIDE),
+    FocalEqRange("19-34mm", 19, 34, LensClass.MAIN),
+    FocalEqRange("35mm+", 35, 240, LensClass.TELE),
+)
+
 fun defaultDeviceProfiles(): List<DeviceProfile> = listOf(
     DeviceProfile(
         deviceModel = "OPPO Find X9",
         aliases = listOf("OPPO Find X9", "Oplus Find X9"),
-        focalEqRanges = listOf(
-            com.oplus.groupimaging.domain.FocalEqRange("0-18mm", 0, 18, LensClass.ULTRA_WIDE),
-            com.oplus.groupimaging.domain.FocalEqRange("19-34mm", 19, 34, LensClass.MAIN),
-            com.oplus.groupimaging.domain.FocalEqRange("35mm+", 35, 240, LensClass.TELE),
-        ),
+        focalEqRanges = defaultFocalEqRanges,
         cameraIdMap = mapOf(0 to LensClass.MAIN, 1 to LensClass.ULTRA_WIDE, 2 to LensClass.TELE),
         profileVersion = 1,
     ),
     DeviceProfile(
         deviceModel = "OPPO Find X8 Ultra",
         aliases = listOf("OPPO Find X8 Ultra", "Oplus Find X8 Ultra"),
-        focalEqRanges = listOf(
-            com.oplus.groupimaging.domain.FocalEqRange("0-18mm", 0, 18, LensClass.ULTRA_WIDE),
-            com.oplus.groupimaging.domain.FocalEqRange("19-34mm", 19, 34, LensClass.MAIN),
-            com.oplus.groupimaging.domain.FocalEqRange("35mm+", 35, 240, LensClass.TELE),
-        ),
+        focalEqRanges = defaultFocalEqRanges,
         cameraIdMap = mapOf(0 to LensClass.MAIN, 1 to LensClass.ULTRA_WIDE, 2 to LensClass.TELE, 3 to LensClass.TELE),
         profileVersion = 1,
     ),

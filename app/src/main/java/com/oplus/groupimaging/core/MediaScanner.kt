@@ -140,4 +140,4 @@ internal fun mediaStoreImageUriForId(id: Long): String =
     "content://media/external/images/media/$id"
 
 private fun android.database.Cursor.getLongOrNull(index: Int): Long? =
-    if (index < 0 || isNull(index)) null else getLong(index).takeIf { it > 0L }
+    if (index < 0 || isNull(index)) null else getLong(index)

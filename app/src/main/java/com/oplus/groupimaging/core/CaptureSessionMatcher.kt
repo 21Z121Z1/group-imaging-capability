@@ -1,5 +1,6 @@
 package com.oplus.groupimaging.core
 
+import com.oplus.groupimaging.domain.CapturePairStatus
 import com.oplus.groupimaging.domain.CaptureSession
 import com.oplus.groupimaging.domain.MediaAsset
 import java.util.UUID
@@ -46,7 +47,7 @@ class CaptureSessionMatcher @Inject constructor() {
                 if (rawIndex >= 0) {
                     updated[rawIndex] = rawMatch.copy(
                         pairedCaptureId = captureId,
-                        capturePairStatus = com.oplus.groupimaging.domain.CapturePairStatus.RAW_COMPANION,
+                        capturePairStatus = CapturePairStatus.RAW_COMPANION,
                     )
                 }
             }
