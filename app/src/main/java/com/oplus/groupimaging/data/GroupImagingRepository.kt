@@ -26,6 +26,7 @@ import com.oplus.groupimaging.domain.CaptureSession
 import com.oplus.groupimaging.domain.DeviceProfile
 import com.oplus.groupimaging.domain.FailedItem
 import com.oplus.groupimaging.domain.FilterSpec
+import com.oplus.groupimaging.domain.FocalEqRange
 import com.oplus.groupimaging.domain.HomeSummary
 import com.oplus.groupimaging.domain.InsightBucket
 import com.oplus.groupimaging.domain.InsightDimension
@@ -1171,7 +1172,7 @@ private fun DeviceProfileEntity.toDomain(): DeviceProfile {
         for (i in 0 until rangesArray.length()) {
             val item = rangesArray.getJSONObject(i)
             add(
-                com.oplus.groupimaging.domain.FocalEqRange(
+                FocalEqRange(
                     label = item.getString("label"),
                     minInclusive = item.getInt("minInclusive"),
                     maxInclusive = item.getInt("maxInclusive"),
