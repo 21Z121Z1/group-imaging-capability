@@ -2,7 +2,7 @@ package com.oplus.groupimaging.core
 
 import com.oplus.groupimaging.domain.CapturePairStatus
 import com.oplus.groupimaging.domain.DeviceProfile
-import FocalEqRange
+import com.oplus.groupimaging.domain.FocalEqRange
 import com.oplus.groupimaging.domain.LensClass
 import com.oplus.groupimaging.domain.MediaAsset
 import com.oplus.groupimaging.domain.ParseStatus
