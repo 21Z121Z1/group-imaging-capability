@@ -31,20 +31,6 @@ class RouteRestorationIntegrationTest {
     }
 
     @Test
-    fun insight_filter_state_survives_activity_recreation() {
-        val robot = AppRobot(composeRule)
-        robot.dismissPermissionDialogIfPresent()
-            .tapTag(TestTags.Home.TELE_LENS)
-            .assertTagVisible(TestTags.Screen.INSIGHT)
-            .assertVisible("TELE")
-
-        composeRule.activityRule.scenario.recreate()
-
-        robot.assertTagVisible(TestTags.Screen.INSIGHT)
-            .assertVisible("TELE")
-    }
-
-    @Test
     fun settings_subpage_survives_activity_recreation() {
         val robot = AppRobot(composeRule)
         robot.dismissPermissionDialogIfPresent()

@@ -2,7 +2,6 @@ package com.oplus.groupimaging.ui.settings
 
 import com.oplus.groupimaging.MainDispatcherRule
 import com.oplus.groupimaging.TestRepository
-import com.oplus.groupimaging.domain.usecase.ObserveDeviceProfiles
 import com.oplus.groupimaging.domain.usecase.ObserveScanDirectories
 import com.oplus.groupimaging.domain.usecase.ObserveScanProgress
 import com.oplus.groupimaging.testing.InsightTestFixtures
@@ -22,16 +21,14 @@ class SettingsViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     @Test
-    fun `refresh loads latest scan directory summary and profile count`() = runTest {
+    fun `refresh loads latest scan directory summary`() = runTest {
         val repository = TestRepository().apply {
             latestScanJobValue = InsightTestFixtures.completedScanJob()
-            deviceProfiles = InsightTestFixtures.deviceProfiles()
             extraScanDirectories = listOf("DCIM/WeChat/", "Pictures/Screenshots/")
         }
 
         val viewModel = SettingsViewModel(
             observeScanProgress = ObserveScanProgress(repository),
-            observeDeviceProfiles = ObserveDeviceProfiles(repository),
             observeScanDirectories = ObserveScanDirectories(repository),
         )
 
@@ -39,7 +36,6 @@ class SettingsViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isLoading)
-        assertEquals(2, state.deviceProfileCount)
         assertEquals(listOf("DCIM/WeChat/", "Pictures/Screenshots/"), state.extraDirectories)
         assertEquals("COMPLETED", state.latestScan?.status?.name)
     }
@@ -47,18 +43,17 @@ class SettingsViewModelTest {
     @Test
     fun `refresh exposes error when summary load fails`() = runTest {
         val repository = TestRepository().apply {
-            deviceProfilesFailure = IllegalStateException("profile table unavailable")
+            scanDirectoriesFailure = IllegalStateException("scan directories unavailable")
         }
 
         val viewModel = SettingsViewModel(
             observeScanProgress = ObserveScanProgress(repository),
-            observeDeviceProfiles = ObserveDeviceProfiles(repository),
             observeScanDirectories = ObserveScanDirectories(repository),
         )
 
         advanceUntilIdle()
 
-        assertEquals("profile table unavailable", viewModel.uiState.value.error)
+        assertEquals("scan directories unavailable", viewModel.uiState.value.error)
         assertFalse(viewModel.uiState.value.isLoading)
     }
 
@@ -67,7 +62,6 @@ class SettingsViewModelTest {
         val repository = TestRepository()
         val viewModel = SettingsViewModel(
             observeScanProgress = ObserveScanProgress(repository),
-            observeDeviceProfiles = ObserveDeviceProfiles(repository),
             observeScanDirectories = ObserveScanDirectories(repository),
         )
         advanceUntilIdle()

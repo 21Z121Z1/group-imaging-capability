@@ -31,16 +31,6 @@ class IndexedLibraryAppIntegrationTest {
     }
 
     @Test
-    fun home_tele_card_opens_seeded_insight_route() {
-        AppRobot(composeRule)
-            .dismissPermissionDialogIfPresent()
-            .assertTagVisible(TestTags.Screen.HOME)
-            .tapTag(TestTags.Home.TELE_LENS)
-            .assertTagVisible(TestTags.Screen.INSIGHT)
-            .assertVisible("TELE")
-    }
-
-    @Test
     fun settings_cards_open_subpages() {
         AppRobot(composeRule)
             .dismissPermissionDialogIfPresent()

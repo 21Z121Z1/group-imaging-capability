@@ -24,17 +24,7 @@ import com.oplus.groupimaging.ui.album.preview.MoveProgressScreen
 import com.oplus.groupimaging.ui.album.preview.MoveProgressUiState
 import com.oplus.groupimaging.ui.components.PermissionDialog
 import com.oplus.groupimaging.ui.icons.GroupImagingIcons
-import com.oplus.groupimaging.ui.insight.FilterBottomSheet
-import com.oplus.groupimaging.ui.insight.FilterSheetUiState
-import com.oplus.groupimaging.ui.insight.InsightFiltersUi
 import com.oplus.groupimaging.testing.TestTags
-
-internal const val InsightSeedKey = "insight_seed"
-
-data class FilterSheetRequest(
-    val state: FilterSheetUiState,
-    val onApply: (InsightFiltersUi) -> Unit,
-)
 
 data class MoveConfirmRequest(
     val state: MoveConfirmUiState,
@@ -102,17 +92,12 @@ data class TopLevelDestination(
 )
 
 val topLevelRouteDefinitions = listOf(
-    Triple(AppRoute.Home, "首页", GroupImagingIcons.Home),
-    Triple(AppRoute.Calendar, "日历", GroupImagingIcons.CalendarMonth),
-    Triple(AppRoute.Insight, "洞察", GroupImagingIcons.Analytics),
     Triple(AppRoute.AlbumGroups, "相册", GroupImagingIcons.Collections),
     Triple(AppRoute.Settings, "设置", GroupImagingIcons.Settings),
 )
 
 @Composable
 fun GlobalSheetsAndDialogs(
-    filterSheetRequest: FilterSheetRequest?,
-    onDismissFilterSheet: () -> Unit,
     moveConfirmRequest: MoveConfirmRequest?,
     onDismissMoveConfirm: () -> Unit,
     moveProgressState: MoveProgressUiState?,
@@ -121,16 +106,6 @@ fun GlobalSheetsAndDialogs(
     onDismissPermissionDialog: () -> Unit,
     onConfirmPermissionDialog: () -> Unit,
 ) {
-    if (filterSheetRequest != null) {
-        FilterBottomSheet(
-            state = filterSheetRequest.state,
-            onDismiss = onDismissFilterSheet,
-            onApply = { filters ->
-                filterSheetRequest.onApply(filters)
-                onDismissFilterSheet()
-            },
-        )
-    }
     if (moveConfirmRequest != null) {
         MoveConfirmDialog(
             state = moveConfirmRequest.state,

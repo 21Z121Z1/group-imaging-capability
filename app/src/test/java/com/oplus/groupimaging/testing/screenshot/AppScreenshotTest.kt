@@ -19,7 +19,6 @@ import com.oplus.groupimaging.testing.UiStateFixtures
 import com.oplus.groupimaging.ui.album.preview.MoveConfirmDialog
 import com.oplus.groupimaging.ui.album.preview.MoveProgressScreen
 import com.oplus.groupimaging.ui.album.preview.RulePreviewScreen
-import com.oplus.groupimaging.ui.home.HomeScreen
 import com.oplus.groupimaging.ui.settings.SettingsScreen
 import com.oplus.groupimaging.ui.theme.OplusInsightTheme
 import java.io.File
@@ -37,35 +36,6 @@ import org.robolectric.annotation.GraphicsMode
 class AppScreenshotTest {
     @get:Rule
     val composeRule = createComposeRule()
-
-    @Test
-    fun capture_home_screen_empty_light() {
-        capture(
-            fileName = "home/home_empty_light.png",
-            darkTheme = false,
-        ) {
-            HomeScreen(
-                state = UiStateFixtures.homeEmpty(),
-                contentPadding = PaddingValues(),
-                onAction = {},
-            )
-        }
-
-    }
-
-    @Test
-    fun capture_home_screen_indexed_dark() {
-        capture(
-            fileName = "home/home_indexed_dark.png",
-            darkTheme = true,
-        ) {
-            HomeScreen(
-                state = UiStateFixtures.homeIndexed(),
-                contentPadding = PaddingValues(),
-                onAction = {},
-            )
-        }
-    }
 
     @Test
     fun capture_settings_screen_large_font_error_state() {

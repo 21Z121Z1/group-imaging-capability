@@ -43,27 +43,12 @@ class EmptyLibraryAppIntegrationTest {
     @Test
     fun permission_dialog_is_not_shown_before_scan_action() {
         AppRobot(composeRule)
-            .assertTagVisible(TestTags.Screen.HOME)
+            .assertTagVisible(TestTags.Screen.ALBUM_GROUPS)
 
         assertTrue(
             composeRule.onAllNodesWithTag(TestTags.PermissionDialog.ROOT, useUnmergedTree = true)
                 .fetchSemanticsNodes()
                 .isEmpty(),
         )
-    }
-
-    @Test
-    fun home_scan_flow_navigates_back_to_indexed_home() {
-        AppRobot(composeRule)
-            .dismissPermissionDialogIfPresent()
-            .assertTagVisible(TestTags.Screen.HOME)
-            .tapTag(TestTags.Home.START_SCAN)
-            .assertTagVisible(TestTags.Screen.SCAN_ONBOARDING)
-            .tapTag(TestTags.ScanOnboarding.START_SCAN)
-            .assertTagVisible(TestTags.Screen.SCAN_PROGRESS)
-            .assertTagVisible(TestTags.ScanProgress.HERO)
-            .tapTag(TestTags.ScanProgress.FINISH)
-            .assertTagVisible(TestTags.Screen.HOME)
-            .assertTagVisible(TestTags.Home.TOTAL_CARD)
     }
 }

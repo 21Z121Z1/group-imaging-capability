@@ -10,8 +10,6 @@ import com.oplus.groupimaging.ui.album.preview.MoveConfirmDialog
 import com.oplus.groupimaging.ui.album.preview.MoveProgressScreen
 import com.oplus.groupimaging.ui.album.preview.RulePreviewAction
 import com.oplus.groupimaging.ui.album.preview.RulePreviewScreen
-import com.oplus.groupimaging.ui.home.HomeAction
-import com.oplus.groupimaging.ui.home.HomeScreen
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -19,27 +17,6 @@ import org.junit.Test
 class WorkflowContractTest {
     @get:Rule
     val composeRule = composeHarnessRule()
-
-    @Test
-    fun home_empty_state_start_scan_emits_action() {
-        var lastAction: HomeAction? = null
-
-        composeRule.setGroupImagingContent {
-            HomeScreen(
-                state = UiStateFixtures.homeEmpty(),
-                contentPadding = PaddingValues(),
-                onAction = { lastAction = it },
-            )
-        }
-
-        AppRobot(composeRule)
-            .assertTagVisible(TestTags.Screen.HOME)
-            .tapTag(TestTags.Home.START_SCAN)
-
-        composeRule.runOnIdle {
-            assertEquals(HomeAction.OnStartScanClick, lastAction)
-        }
-    }
 
     @Test
     fun rule_preview_move_all_emits_action() {

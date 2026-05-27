@@ -26,16 +26,9 @@ import com.oplus.groupimaging.domain.ScanType
 import com.oplus.groupimaging.ui.album.groups.AlbumGroupsRoute
 import com.oplus.groupimaging.ui.album.preview.MoveProgressUiState
 import com.oplus.groupimaging.ui.album.preview.RulePreviewRoute
-import com.oplus.groupimaging.ui.calendar.CalendarRoute
-import com.oplus.groupimaging.ui.deviceprofiles.DeviceProfilesRoute
-import com.oplus.groupimaging.ui.failed.FailedItemsRoute
-import com.oplus.groupimaging.ui.home.HomeRoute
-import com.oplus.groupimaging.ui.insight.FilterSheetUiState
-import com.oplus.groupimaging.ui.insight.InsightRoute
 import com.oplus.groupimaging.ui.scan.onboarding.ScanOnboardingRoute
 import com.oplus.groupimaging.ui.scan.progress.ScanProgressRoute
 import com.oplus.groupimaging.ui.settings.DirectoryManagerRoute
-import com.oplus.groupimaging.ui.settings.ScopeExplanationRoute
 import com.oplus.groupimaging.ui.settings.SettingsRoute
 import com.oplus.groupimaging.ui.theme.OplusInsightTheme
 import androidx.compose.material3.SnackbarHostState
@@ -61,7 +54,6 @@ fun AppRoot() {
             )
         }
     }
-    var filterSheetRequest by remember { mutableStateOf<FilterSheetRequest?>(null) }
     var moveConfirmRequest by remember { mutableStateOf<MoveConfirmRequest?>(null) }
     var moveProgressState by rememberSaveable(stateSaver = nullableMoveProgressUiStateSaver()) {
         mutableStateOf<MoveProgressUiState?>(null)
@@ -98,43 +90,8 @@ fun AppRoot() {
             content = { innerPadding ->
                 NavHost(
                     navController = navController,
-                    startDestination = AppRoute.Home.route,
+                    startDestination = AppRoute.AlbumGroups.route,
                 ) {
-                    composable(AppRoute.Home.route) {
-                        HomeRoute(
-                            contentPadding = innerPadding,
-                            onNavigateToScanOnboarding = { navController.navigate(AppRoute.ScanOnboarding.route) },
-                            onNavigateToIncrementalScan = {
-                                requestMediaPermissionThen {
-                                    navController.navigate(AppRoute.ScanProgress.create(ScanType.INCREMENTAL))
-                                }
-                            },
-                            onNavigateToInsight = { seed ->
-                                navController.currentBackStackEntry?.savedStateHandle?.set(InsightSeedKey, seed)
-                                navController.navigate(AppRoute.Insight.route)
-                            },
-                            onShowScanStatus = { navController.navigate(AppRoute.ScanProgress.create(null)) },
-                        )
-                    }
-                    composable(AppRoute.Calendar.route) {
-                        CalendarRoute(
-                            contentPadding = innerPadding,
-                            onNavigateToInsight = { seed ->
-                                navController.currentBackStackEntry?.savedStateHandle?.set(InsightSeedKey, seed)
-                                navController.navigate(AppRoute.Insight.route)
-                            },
-                        )
-                    }
-                    composable(AppRoute.Insight.route) {
-                        val initialSeed = navController.previousBackStackEntry
-                            ?.savedStateHandle
-                            ?.remove<InsightFilterSeed>(InsightSeedKey)
-                        InsightRoute(
-                            contentPadding = innerPadding,
-                            initialSeed = initialSeed,
-                            onOpenFilterSheet = { request -> filterSheetRequest = request },
-                        )
-                    }
                     composable(AppRoute.AlbumGroups.route) {
                         AlbumGroupsRoute(
                             contentPadding = innerPadding,
@@ -144,10 +101,7 @@ fun AppRoot() {
                     composable(AppRoute.Settings.route) {
                         SettingsRoute(
                             contentPadding = innerPadding,
-                            onNavigateToFailedItems = { navController.navigate(AppRoute.FailedItems.route) },
-                            onNavigateToDeviceProfiles = { navController.navigate(AppRoute.DeviceProfiles.route) },
                             onNavigateToDirectoryManager = { navController.navigate(AppRoute.DirectoryManager.route) },
-                            onNavigateToScopeExplanation = { navController.navigate(AppRoute.ScopeExplanation.route) },
                             onNavigateToFullScan = {
                                 requestMediaPermissionThen {
                                     navController.navigate(AppRoute.ScanProgress.create(ScanType.FULL))
@@ -178,9 +132,9 @@ fun AppRoot() {
                         ScanProgressRoute(
                             contentPadding = innerPadding,
                             onFinish = {
-                                val popped = navController.popBackStack(AppRoute.Home.route, inclusive = false)
+                                val popped = navController.popBackStack(AppRoute.AlbumGroups.route, inclusive = false)
                                 if (!popped) {
-                                    navController.navigate(AppRoute.Home.route) {
+                                    navController.navigate(AppRoute.AlbumGroups.route) {
                                         popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true
                                         }
@@ -189,7 +143,6 @@ fun AppRoot() {
                                     }
                                 }
                             },
-                            onNavigateToFailedItems = { navController.navigate(AppRoute.FailedItems.route) },
                         )
                     }
                     composable(AppRoute.RulePreview.route) { backStackEntry ->
@@ -201,25 +154,14 @@ fun AppRoot() {
                             onMoveProgress = { state -> moveProgressState = state },
                         )
                     }
-                    composable(AppRoute.FailedItems.route) {
-                        FailedItemsRoute(contentPadding = innerPadding)
-                    }
-                    composable(AppRoute.DeviceProfiles.route) {
-                        DeviceProfilesRoute(contentPadding = innerPadding)
-                    }
                     composable(AppRoute.DirectoryManager.route) {
                         DirectoryManagerRoute(contentPadding = innerPadding)
-                    }
-                    composable(AppRoute.ScopeExplanation.route) {
-                        ScopeExplanationRoute(contentPadding = innerPadding)
                     }
                 }
             },
         )
 
         GlobalSheetsAndDialogs(
-            filterSheetRequest = filterSheetRequest,
-            onDismissFilterSheet = { filterSheetRequest = null },
             moveConfirmRequest = moveConfirmRequest,
             onDismissMoveConfirm = { moveConfirmRequest = null },
             moveProgressState = moveProgressState,

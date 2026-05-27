@@ -53,12 +53,10 @@ data class ScanProgressUiState(
 
 sealed interface ScanProgressAction : UiAction {
     data object OnFinishClick : ScanProgressAction
-    data object OnViewFailedItemsClick : ScanProgressAction
 }
 
 sealed interface ScanProgressEffect : UiEffect {
     data object NavigateBackToHome : ScanProgressEffect
-    data object NavigateToFailedItems : ScanProgressEffect
 }
 
 @HiltViewModel
@@ -83,7 +81,6 @@ class ScanProgressViewModel @Inject constructor(
     override fun onAction(action: ScanProgressAction) {
         when (action) {
             ScanProgressAction.OnFinishClick -> emitEffect(ScanProgressEffect.NavigateBackToHome)
-            ScanProgressAction.OnViewFailedItemsClick -> emitEffect(ScanProgressEffect.NavigateToFailedItems)
         }
     }
 
@@ -168,7 +165,6 @@ private fun scanStageLabel(stage: ScanStage): String = when (stage) {
 fun ScanProgressRoute(
     contentPadding: PaddingValues,
     onFinish: () -> Unit,
-    onNavigateToFailedItems: () -> Unit,
     viewModel: ScanProgressViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -176,7 +172,6 @@ fun ScanProgressRoute(
         viewModel.effect.collect { effect ->
             when (effect) {
                 ScanProgressEffect.NavigateBackToHome -> onFinish()
-                ScanProgressEffect.NavigateToFailedItems -> onNavigateToFailedItems()
             }
         }
     }
@@ -210,7 +205,7 @@ fun ScanProgressScreen(
         item {
             SectionContainer("统计") {
                 StatCard("成功", state.successCount.toString())
-                StatCard("失败", state.failedCount.toString(), modifier = Modifier.testTag(TestTags.ScanProgress.VIEW_FAILED)) { onAction(ScanProgressAction.OnViewFailedItemsClick) }
+                StatCard("失败", state.failedCount.toString())
             }
         }
         if (state.isCompleted) {

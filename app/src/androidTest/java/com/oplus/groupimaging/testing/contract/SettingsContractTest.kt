@@ -31,18 +31,10 @@ class SettingsContractTest {
         AppRobot(composeRule)
             .assertTagVisible(TestTags.Screen.SETTINGS)
             .tapTag(TestTags.Settings.MANAGE_DIRECTORIES)
-            .tapTag(TestTags.Settings.PARSER_VERSION)
-            .tapTag(TestTags.Settings.DEVICE_PROFILE_COUNT)
-            .tapTag(TestTags.Settings.SCOPE_EXPLANATION)
 
         composeRule.runOnIdle {
             assertEquals(
-                listOf(
-                    SettingsAction.OnManageDirectoriesClick,
-                    SettingsAction.OnOpenFailedItems,
-                    SettingsAction.OnOpenDeviceProfiles,
-                    SettingsAction.OnOpenScopeExplanation,
-                ),
+                listOf(SettingsAction.OnManageDirectoriesClick),
                 emittedActions,
             )
         }
