@@ -1,0 +1,973 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 4,
+    "identityHash": "3d49eda58c81a4d3f910ffadedddd454",
+    "entities": [
+      {
+        "tableName": "media_assets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`generationId` INTEGER NOT NULL, `assetId` TEXT NOT NULL, `mediaStoreId` INTEGER NOT NULL, `path` TEXT, `relativePath` TEXT, `uri` TEXT NOT NULL, `fileName` TEXT NOT NULL, `mimeType` TEXT NOT NULL, `size` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `modifiedAt` INTEGER NOT NULL, `isOplusOriginal` INTEGER NOT NULL, `isLivePhoto` INTEGER NOT NULL, `isRaw` INTEGER NOT NULL, `pairedCaptureId` TEXT, `deviceModel` TEXT, `focalLength` REAL, `focalLengthEq` INTEGER, `lensClass` TEXT NOT NULL, `captureModeLabel` TEXT, `userCommentRaw` TEXT, `userCommentDigest` TEXT, `parseStatus` TEXT NOT NULL, `parseVersion` INTEGER NOT NULL, `sourceConfidence` REAL NOT NULL, `capturePairStatus` TEXT NOT NULL, `contentSignature` TEXT NOT NULL, PRIMARY KEY(`generationId`, `assetId`))",
+        "fields": [
+          {
+            "fieldPath": "generationId",
+            "columnName": "generationId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaStoreId",
+            "columnName": "mediaStoreId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relativePath",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "uri",
+            "columnName": "uri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "fileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modifiedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isOplusOriginal",
+            "columnName": "isOplusOriginal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isLivePhoto",
+            "columnName": "isLivePhoto",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isRaw",
+            "columnName": "isRaw",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pairedCaptureId",
+            "columnName": "pairedCaptureId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "deviceModel",
+            "columnName": "deviceModel",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "focalLength",
+            "columnName": "focalLength",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "focalLengthEq",
+            "columnName": "focalLengthEq",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lensClass",
+            "columnName": "lensClass",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "captureModeLabel",
+            "columnName": "captureModeLabel",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "userCommentRaw",
+            "columnName": "userCommentRaw",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "userCommentDigest",
+            "columnName": "userCommentDigest",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "parseStatus",
+            "columnName": "parseStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parseVersion",
+            "columnName": "parseVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceConfidence",
+            "columnName": "sourceConfidence",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capturePairStatus",
+            "columnName": "capturePairStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentSignature",
+            "columnName": "contentSignature",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "generationId",
+            "assetId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_assets_generationId",
+            "unique": false,
+            "columnNames": [
+              "generationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_assets_generationId` ON `${TABLE_NAME}` (`generationId`)"
+          },
+          {
+            "name": "index_media_assets_generationId_mediaStoreId",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "mediaStoreId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_assets_generationId_mediaStoreId` ON `${TABLE_NAME}` (`generationId`, `mediaStoreId`)"
+          },
+          {
+            "name": "index_media_assets_generationId_captureModeLabel",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "captureModeLabel"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_assets_generationId_captureModeLabel` ON `${TABLE_NAME}` (`generationId`, `captureModeLabel`)"
+          },
+          {
+            "name": "index_media_assets_generationId_deviceModel",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "deviceModel"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_assets_generationId_deviceModel` ON `${TABLE_NAME}` (`generationId`, `deviceModel`)"
+          },
+          {
+            "name": "index_media_assets_generationId_focalLengthEq",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "focalLengthEq"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_assets_generationId_focalLengthEq` ON `${TABLE_NAME}` (`generationId`, `focalLengthEq`)"
+          },
+          {
+            "name": "index_media_assets_generationId_lensClass",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "lensClass"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_assets_generationId_lensClass` ON `${TABLE_NAME}` (`generationId`, `lensClass`)"
+          },
+          {
+            "name": "index_media_assets_generationId_createdAt",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_assets_generationId_createdAt` ON `${TABLE_NAME}` (`generationId`, `createdAt`)"
+          },
+          {
+            "name": "index_media_assets_generationId_modifiedAt",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "modifiedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_assets_generationId_modifiedAt` ON `${TABLE_NAME}` (`generationId`, `modifiedAt`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "capture_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`generationId` INTEGER NOT NULL, `captureId` TEXT NOT NULL, `primaryAssetId` TEXT NOT NULL, `pairedRawAssetId` TEXT, `captureTime` INTEGER NOT NULL, `deviceModel` TEXT, `lensClass` TEXT NOT NULL, `focalLengthEq` INTEGER, `isLivePhoto` INTEGER NOT NULL, `isRawCapture` INTEGER NOT NULL, `captureModeLabel` TEXT, PRIMARY KEY(`generationId`, `captureId`))",
+        "fields": [
+          {
+            "fieldPath": "generationId",
+            "columnName": "generationId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "captureId",
+            "columnName": "captureId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryAssetId",
+            "columnName": "primaryAssetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pairedRawAssetId",
+            "columnName": "pairedRawAssetId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "captureTime",
+            "columnName": "captureTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceModel",
+            "columnName": "deviceModel",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lensClass",
+            "columnName": "lensClass",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "focalLengthEq",
+            "columnName": "focalLengthEq",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isLivePhoto",
+            "columnName": "isLivePhoto",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isRawCapture",
+            "columnName": "isRawCapture",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "captureModeLabel",
+            "columnName": "captureModeLabel",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "generationId",
+            "captureId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_capture_sessions_generationId",
+            "unique": false,
+            "columnNames": [
+              "generationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_capture_sessions_generationId` ON `${TABLE_NAME}` (`generationId`)"
+          },
+          {
+            "name": "index_capture_sessions_generationId_captureTime",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "captureTime"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_capture_sessions_generationId_captureTime` ON `${TABLE_NAME}` (`generationId`, `captureTime`)"
+          },
+          {
+            "name": "index_capture_sessions_generationId_lensClass",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "lensClass"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_capture_sessions_generationId_lensClass` ON `${TABLE_NAME}` (`generationId`, `lensClass`)"
+          },
+          {
+            "name": "index_capture_sessions_generationId_deviceModel",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "deviceModel"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_capture_sessions_generationId_deviceModel` ON `${TABLE_NAME}` (`generationId`, `deviceModel`)"
+          },
+          {
+            "name": "index_capture_sessions_generationId_focalLengthEq",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "focalLengthEq"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_capture_sessions_generationId_focalLengthEq` ON `${TABLE_NAME}` (`generationId`, `focalLengthEq`)"
+          },
+          {
+            "name": "index_capture_sessions_generationId_captureModeLabel",
+            "unique": false,
+            "columnNames": [
+              "generationId",
+              "captureModeLabel"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_capture_sessions_generationId_captureModeLabel` ON `${TABLE_NAME}` (`generationId`, `captureModeLabel`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "device_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`deviceModel` TEXT NOT NULL, `aliasesJson` TEXT NOT NULL, `focalEqRangesJson` TEXT NOT NULL, `cameraIdMapJson` TEXT NOT NULL, `profileVersion` INTEGER NOT NULL, PRIMARY KEY(`deviceModel`))",
+        "fields": [
+          {
+            "fieldPath": "deviceModel",
+            "columnName": "deviceModel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aliasesJson",
+            "columnName": "aliasesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "focalEqRangesJson",
+            "columnName": "focalEqRangesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cameraIdMapJson",
+            "columnName": "cameraIdMapJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profileVersion",
+            "columnName": "profileVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "deviceModel"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "smart_rules",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ruleId` TEXT NOT NULL, `ruleName` TEXT NOT NULL, `conditionsJson` TEXT NOT NULL, `targetFolder` TEXT NOT NULL, `actionType` TEXT NOT NULL, `enabled` INTEGER NOT NULL, PRIMARY KEY(`ruleId`))",
+        "fields": [
+          {
+            "fieldPath": "ruleId",
+            "columnName": "ruleId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleName",
+            "columnName": "ruleName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conditionsJson",
+            "columnName": "conditionsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetFolder",
+            "columnName": "targetFolder",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionType",
+            "columnName": "actionType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ruleId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "scan_jobs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`jobId` TEXT NOT NULL, `type` TEXT NOT NULL, `status` TEXT NOT NULL, `totalCount` INTEGER NOT NULL, `scannedCount` INTEGER NOT NULL, `etaSeconds` INTEGER, `startedAt` INTEGER NOT NULL, `finishedAt` INTEGER, `parseVersion` INTEGER NOT NULL, `failureCount` INTEGER NOT NULL, PRIMARY KEY(`jobId`))",
+        "fields": [
+          {
+            "fieldPath": "jobId",
+            "columnName": "jobId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalCount",
+            "columnName": "totalCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scannedCount",
+            "columnName": "scannedCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "etaSeconds",
+            "columnName": "etaSeconds",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "startedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finishedAt",
+            "columnName": "finishedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "parseVersion",
+            "columnName": "parseVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "failureCount",
+            "columnName": "failureCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "jobId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "scan_directories",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`relativePath` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`relativePath`))",
+        "fields": [
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relativePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "relativePath"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "scan_cursors",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`scopeHash` TEXT NOT NULL, `rootsJson` TEXT NOT NULL, `parseVersion` INTEGER NOT NULL, `lastSuccessfulModifiedAt` INTEGER, `lastSuccessfulMediaId` INTEGER, `lastScannedModifiedAt` INTEGER, `lastScannedMediaId` INTEGER, `resumeModifiedAt` INTEGER, `resumeMediaId` INTEGER, `activeJobId` TEXT, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`scopeHash`))",
+        "fields": [
+          {
+            "fieldPath": "scopeHash",
+            "columnName": "scopeHash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rootsJson",
+            "columnName": "rootsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parseVersion",
+            "columnName": "parseVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSuccessfulModifiedAt",
+            "columnName": "lastSuccessfulModifiedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lastSuccessfulMediaId",
+            "columnName": "lastSuccessfulMediaId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lastScannedModifiedAt",
+            "columnName": "lastScannedModifiedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lastScannedMediaId",
+            "columnName": "lastScannedMediaId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "resumeModifiedAt",
+            "columnName": "resumeModifiedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "resumeMediaId",
+            "columnName": "resumeMediaId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "activeJobId",
+            "columnName": "activeJobId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "scopeHash"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "index_generations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`generationKey` TEXT NOT NULL, `activeGenerationId` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`generationKey`))",
+        "fields": [
+          {
+            "fieldPath": "generationKey",
+            "columnName": "generationKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activeGenerationId",
+            "columnName": "activeGenerationId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "generationKey"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "move_plans",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`token` TEXT NOT NULL, `ruleName` TEXT NOT NULL, `targetFolder` TEXT NOT NULL, `targetRelativePath` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `status` TEXT NOT NULL, `completedAt` INTEGER, PRIMARY KEY(`token`))",
+        "fields": [
+          {
+            "fieldPath": "token",
+            "columnName": "token",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ruleName",
+            "columnName": "ruleName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetFolder",
+            "columnName": "targetFolder",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetRelativePath",
+            "columnName": "targetRelativePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAt",
+            "columnName": "completedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "token"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "move_candidates",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`planToken` TEXT NOT NULL, `assetId` TEXT NOT NULL, `sourcePath` TEXT, `sourceUri` TEXT NOT NULL, `fileName` TEXT NOT NULL, `destinationFileName` TEXT NOT NULL, `destinationRelativePath` TEXT NOT NULL, `destinationPath` TEXT NOT NULL, `conflict` INTEGER NOT NULL, `role` TEXT NOT NULL, `status` TEXT NOT NULL, `failureReason` TEXT, `captureDate` TEXT, `deviceModel` TEXT, `focalLengthEq` INTEGER, `captureModeLabel` TEXT, `isLivePhoto` INTEGER NOT NULL, `isRaw` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`planToken`, `assetId`, `role`))",
+        "fields": [
+          {
+            "fieldPath": "planToken",
+            "columnName": "planToken",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "assetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourcePath",
+            "columnName": "sourcePath",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "sourceUri",
+            "columnName": "sourceUri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "fileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "destinationFileName",
+            "columnName": "destinationFileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "destinationRelativePath",
+            "columnName": "destinationRelativePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "destinationPath",
+            "columnName": "destinationPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conflict",
+            "columnName": "conflict",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "failureReason",
+            "columnName": "failureReason",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "captureDate",
+            "columnName": "captureDate",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "deviceModel",
+            "columnName": "deviceModel",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "focalLengthEq",
+            "columnName": "focalLengthEq",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "captureModeLabel",
+            "columnName": "captureModeLabel",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isLivePhoto",
+            "columnName": "isLivePhoto",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isRaw",
+            "columnName": "isRaw",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "planToken",
+            "assetId",
+            "role"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_move_candidates_planToken",
+            "unique": false,
+            "columnNames": [
+              "planToken"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_move_candidates_planToken` ON `${TABLE_NAME}` (`planToken`)"
+          },
+          {
+            "name": "index_move_candidates_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_move_candidates_status` ON `${TABLE_NAME}` (`status`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "archive_audits",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`auditId` TEXT NOT NULL, `previewToken` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `movedCount` INTEGER NOT NULL, `failureCount` INTEGER NOT NULL, `failureJson` TEXT NOT NULL, PRIMARY KEY(`auditId`))",
+        "fields": [
+          {
+            "fieldPath": "auditId",
+            "columnName": "auditId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "previewToken",
+            "columnName": "previewToken",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "movedCount",
+            "columnName": "movedCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "failureCount",
+            "columnName": "failureCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "failureJson",
+            "columnName": "failureJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "auditId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3d49eda58c81a4d3f910ffadedddd454')"
+    ]
+  }
+}

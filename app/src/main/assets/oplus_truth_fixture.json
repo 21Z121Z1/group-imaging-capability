@@ -1,0 +1,558 @@
+{
+  "source_dir": "/Volumes/42APFS/x9",
+  "sample_count": 4,
+  "samples": [
+    {
+      "file_name": "IMG20260306113440.jpg",
+      "make": "OPPO",
+      "model": "OPPO Find X9",
+      "user_comment": "oplus_137429010",
+      "focal_length": "13.8 mm",
+      "focal_length_eq": "73 mm",
+      "mime_type": "image/jpeg",
+      "decoded": {
+        "raw_value": {
+          "input": "oplus_137429010",
+          "normalized": "Oplus_137429010",
+          "number": 137429010,
+          "hex": "0x8310012"
+        },
+        "camera_id_candidates": {
+          "input_candidates": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "feasible_candidates": [
+            0,
+            2
+          ]
+        },
+        "mode_bits": [
+          {
+            "name": "beauty",
+            "human_readable_name": "beauty",
+            "bit": 2,
+            "bit_hex": "0x2",
+            "source": "smali_classes2/yj/a.smali",
+            "source_smali": "smali_classes2/yj/a.smali",
+            "family": "mode",
+            "note": "shared with cameraId=2 and capture-side beauty flag"
+          },
+          {
+            "name": "portrait",
+            "human_readable_name": "portrait",
+            "bit": 16,
+            "bit_hex": "0x10",
+            "source": "smali_classes2/yj/a.smali",
+            "source_smali": "smali_classes2/yj/a.smali",
+            "family": "mode"
+          }
+        ],
+        "feature_bits": [
+          {
+            "name": "beauty_enabled_flag",
+            "human_readable_name": "Beauty enabled flag",
+            "bit": 2,
+            "bit_hex": "0x2",
+            "source": "smali_classes12/hk/a.smali",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "family": "capture_flag",
+            "note": "beauty value > 0"
+          },
+          {
+            "name": "u4_G_state_flag",
+            "human_readable_name": "u4.G() state flag",
+            "bit": 16,
+            "bit_hex": "0x10",
+            "source": "smali_classes12/hk/a.smali",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "family": "capture_flag",
+            "note": "set when u4.G() true"
+          }
+        ],
+        "exif_tag_bits": [
+          {
+            "name": "EXIF_TAG_SUPPORT_HASSEL_WATER_MARK",
+            "human_readable_name": "Hassel watermark EXIF tag",
+            "bit": 1048576,
+            "bit_hex": "0x100000",
+            "source": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "family": "exif_tag_flag",
+            "note": "named EXIF tag flag"
+          },
+          {
+            "name": "EXIF_TAG_ULTRA_HDR",
+            "human_readable_name": "Ultra HDR EXIF tag",
+            "bit": 2097152,
+            "bit_hex": "0x200000",
+            "source": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "family": "exif_tag_flag",
+            "note": "named EXIF tag flag"
+          }
+        ],
+        "tag_map": [
+          {
+            "hex": "0x2",
+            "symbol": "beauty",
+            "human_readable_name": "Beauty mode",
+            "family": "mode",
+            "source_smali": "smali_classes2/yj/a.smali",
+            "note": "shared with cameraId=2 and capture-side beauty flag"
+          },
+          {
+            "hex": "0x10",
+            "symbol": "portrait",
+            "human_readable_name": "Portrait mode",
+            "family": "mode",
+            "source_smali": "smali_classes2/yj/a.smali"
+          },
+          {
+            "hex": "0x2",
+            "symbol": "beauty_enabled_flag",
+            "human_readable_name": "Beauty enabled flag",
+            "family": "capture_flag",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "note": "beauty value > 0"
+          },
+          {
+            "hex": "0x10",
+            "symbol": "u4_G_state_flag",
+            "human_readable_name": "u4.G() state flag",
+            "family": "capture_flag",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "note": "set when u4.G() true"
+          },
+          {
+            "hex": "0x100000",
+            "symbol": "EXIF_TAG_SUPPORT_HASSEL_WATER_MARK",
+            "human_readable_name": "Hassel watermark EXIF tag",
+            "family": "exif_tag_flag",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali"
+          },
+          {
+            "hex": "0x200000",
+            "symbol": "EXIF_TAG_ULTRA_HDR",
+            "human_readable_name": "Ultra HDR EXIF tag",
+            "family": "exif_tag_flag",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali"
+          }
+        ],
+        "unknown_bits": [
+          {
+            "bit": 65536,
+            "bit_hex": "0x10000"
+          },
+          {
+            "bit": 134217728,
+            "bit_hex": "0x8000000"
+          }
+        ],
+        "inference_notes": [
+          "master capture path is routed by mode string 'professional'; there is no standalone 'master' bit in Lyj/a.",
+          "master video path uses mode string 'masterVideo', but 'masterVideo' is not in Lyj/a mode-bit map.",
+          "PICTURE_EXIF_FLAG -> EXIF_COMMENTS conversion occurs in lower camera stack (not visible in apk smali).",
+          "absence of 0x100 does not exclude masterVideo; masterVideo commonly appears as cameraId + extra feature flags.",
+          "cameraId is ambiguous from value alone (especially around bit 0x2 overlap); keep candidate set and combine with context.",
+          "bit 0x2 is ambiguous: could be beauty mode bit, beauty-enabled feature flag, or cameraId=2 overlap.",
+          "bit 0x10 is ambiguous: could be portrait mode bit or capture-side u4.G() feature flag.",
+          "named EXIF tag flags present: EXIF_TAG_SUPPORT_HASSEL_WATER_MARK, EXIF_TAG_ULTRA_HDR; these are OplusExifTag constants rather than camera mode bits.",
+          "unmapped residual bits present: 0x10000, 0x8000000; these are not covered by the current APK-derived mode/feature tables."
+        ]
+      }
+    },
+    {
+      "file_name": "IMG20260304155953_BURST043.jpg",
+      "make": "OPPO",
+      "model": "OPPO Find X9",
+      "user_comment": "oplus_70254592",
+      "focal_length": "6.1 mm",
+      "focal_length_eq": "23 mm",
+      "mime_type": "image/jpeg",
+      "decoded": {
+        "raw_value": {
+          "input": "oplus_70254592",
+          "normalized": "Oplus_70254592",
+          "number": 70254592,
+          "hex": "0x4300000"
+        },
+        "camera_id_candidates": {
+          "input_candidates": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "feasible_candidates": [
+            0
+          ]
+        },
+        "mode_bits": [],
+        "feature_bits": [
+          {
+            "name": "storage_t_positive_flag",
+            "human_readable_name": "CameraPicture.t positive flag",
+            "bit": 67108864,
+            "bit_hex": "0x4000000",
+            "source": "smali_classes12/el/q.smali",
+            "source_smali": "smali_classes12/el/q.smali",
+            "family": "storage_flag",
+            "note": "set when CameraPicture.t > 0"
+          }
+        ],
+        "exif_tag_bits": [
+          {
+            "name": "EXIF_TAG_SUPPORT_HASSEL_WATER_MARK",
+            "human_readable_name": "Hassel watermark EXIF tag",
+            "bit": 1048576,
+            "bit_hex": "0x100000",
+            "source": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "family": "exif_tag_flag",
+            "note": "named EXIF tag flag"
+          },
+          {
+            "name": "EXIF_TAG_ULTRA_HDR",
+            "human_readable_name": "Ultra HDR EXIF tag",
+            "bit": 2097152,
+            "bit_hex": "0x200000",
+            "source": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "family": "exif_tag_flag",
+            "note": "named EXIF tag flag"
+          }
+        ],
+        "tag_map": [
+          {
+            "hex": "0x4000000",
+            "symbol": "storage_t_positive_flag",
+            "human_readable_name": "CameraPicture.t positive flag",
+            "family": "storage_flag",
+            "source_smali": "smali_classes12/el/q.smali",
+            "note": "set when CameraPicture.t > 0"
+          },
+          {
+            "hex": "0x100000",
+            "symbol": "EXIF_TAG_SUPPORT_HASSEL_WATER_MARK",
+            "human_readable_name": "Hassel watermark EXIF tag",
+            "family": "exif_tag_flag",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali"
+          },
+          {
+            "hex": "0x200000",
+            "symbol": "EXIF_TAG_ULTRA_HDR",
+            "human_readable_name": "Ultra HDR EXIF tag",
+            "family": "exif_tag_flag",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali"
+          }
+        ],
+        "unknown_bits": [],
+        "inference_notes": [
+          "master capture path is routed by mode string 'professional'; there is no standalone 'master' bit in Lyj/a.",
+          "master video path uses mode string 'masterVideo', but 'masterVideo' is not in Lyj/a mode-bit map.",
+          "PICTURE_EXIF_FLAG -> EXIF_COMMENTS conversion occurs in lower camera stack (not visible in apk smali).",
+          "absence of 0x100 does not exclude masterVideo; masterVideo commonly appears as cameraId + extra feature flags.",
+          "no explicit mode bit is present; treat this as unknown_no_mode_bit and default to automode in classification.",
+          "named EXIF tag flags present: EXIF_TAG_SUPPORT_HASSEL_WATER_MARK, EXIF_TAG_ULTRA_HDR; these are OplusExifTag constants rather than camera mode bits."
+        ]
+      }
+    },
+    {
+      "file_name": "IMG20260203165233_preview.jpg",
+      "make": "OPPO",
+      "model": "OPPO Find X8 Ultra",
+      "user_comment": "oplus_3146016",
+      "focal_length": "16.5 mm",
+      "focal_length_eq": "85 mm",
+      "mime_type": "image/jpeg",
+      "decoded": {
+        "raw_value": {
+          "input": "oplus_3146016",
+          "normalized": "Oplus_3146016",
+          "number": 3146016,
+          "hex": "0x300120"
+        },
+        "camera_id_candidates": {
+          "input_candidates": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "feasible_candidates": [
+            0
+          ]
+        },
+        "mode_bits": [
+          {
+            "name": "professional",
+            "human_readable_name": "professional",
+            "bit": 256,
+            "bit_hex": "0x100",
+            "source": "smali_classes2/yj/a.smali",
+            "source_smali": "smali_classes2/yj/a.smali",
+            "family": "mode",
+            "note": "shared 0x100 base bit"
+          }
+        ],
+        "feature_bits": [
+          {
+            "name": "capture_sub_mode_flag",
+            "human_readable_name": "Capture sub-mode flag",
+            "bit": 32,
+            "bit_hex": "0x20",
+            "source": "smali_classes12/hk/a.smali",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "family": "capture_flag",
+            "note": "set when method arg p1 > 0"
+          }
+        ],
+        "exif_tag_bits": [
+          {
+            "name": "EXIF_TAG_SUPPORT_HASSEL_WATER_MARK",
+            "human_readable_name": "Hassel watermark EXIF tag",
+            "bit": 1048576,
+            "bit_hex": "0x100000",
+            "source": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "family": "exif_tag_flag",
+            "note": "named EXIF tag flag"
+          },
+          {
+            "name": "EXIF_TAG_ULTRA_HDR",
+            "human_readable_name": "Ultra HDR EXIF tag",
+            "bit": 2097152,
+            "bit_hex": "0x200000",
+            "source": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "family": "exif_tag_flag",
+            "note": "named EXIF tag flag"
+          }
+        ],
+        "tag_map": [
+          {
+            "hex": "0x100",
+            "symbol": "professional",
+            "human_readable_name": "Professional / MasterCap",
+            "family": "mode",
+            "source_smali": "smali_classes2/yj/a.smali",
+            "note": "shared 0x100 base bit"
+          },
+          {
+            "hex": "0x20",
+            "symbol": "capture_sub_mode_flag",
+            "human_readable_name": "Capture sub-mode flag",
+            "family": "capture_flag",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "note": "set when method arg p1 > 0"
+          },
+          {
+            "hex": "0x100000",
+            "symbol": "EXIF_TAG_SUPPORT_HASSEL_WATER_MARK",
+            "human_readable_name": "Hassel watermark EXIF tag",
+            "family": "exif_tag_flag",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali"
+          },
+          {
+            "hex": "0x200000",
+            "symbol": "EXIF_TAG_ULTRA_HDR",
+            "human_readable_name": "Ultra HDR EXIF tag",
+            "family": "exif_tag_flag",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali"
+          }
+        ],
+        "unknown_bits": [],
+        "inference_notes": [
+          "master capture path is routed by mode string 'professional'; there is no standalone 'master' bit in Lyj/a.",
+          "master video path uses mode string 'masterVideo', but 'masterVideo' is not in Lyj/a mode-bit map.",
+          "PICTURE_EXIF_FLAG -> EXIF_COMMENTS conversion occurs in lower camera stack (not visible in apk smali).",
+          "professional bit (0x100) can represent ProfessionalCap/HSProfessionalCap/MasterCap routing; not uniquely distinguishable by number alone.",
+          "named EXIF tag flags present: EXIF_TAG_SUPPORT_HASSEL_WATER_MARK, EXIF_TAG_ULTRA_HDR; these are OplusExifTag constants rather than camera mode bits."
+        ]
+      }
+    },
+    {
+      "file_name": "IMG20260218152415.jpg",
+      "make": "OPPO",
+      "model": "OPPO Find X9",
+      "user_comment": "oplus_137429042",
+      "focal_length": "13.8 mm",
+      "focal_length_eq": "73 mm",
+      "mime_type": "image/jpeg",
+      "decoded": {
+        "raw_value": {
+          "input": "oplus_137429042",
+          "normalized": "Oplus_137429042",
+          "number": 137429042,
+          "hex": "0x8310032"
+        },
+        "camera_id_candidates": {
+          "input_candidates": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "feasible_candidates": [
+            0,
+            2
+          ]
+        },
+        "mode_bits": [
+          {
+            "name": "beauty",
+            "human_readable_name": "beauty",
+            "bit": 2,
+            "bit_hex": "0x2",
+            "source": "smali_classes2/yj/a.smali",
+            "source_smali": "smali_classes2/yj/a.smali",
+            "family": "mode",
+            "note": "shared with cameraId=2 and capture-side beauty flag"
+          },
+          {
+            "name": "portrait",
+            "human_readable_name": "portrait",
+            "bit": 16,
+            "bit_hex": "0x10",
+            "source": "smali_classes2/yj/a.smali",
+            "source_smali": "smali_classes2/yj/a.smali",
+            "family": "mode"
+          }
+        ],
+        "feature_bits": [
+          {
+            "name": "capture_sub_mode_flag",
+            "human_readable_name": "Capture sub-mode flag",
+            "bit": 32,
+            "bit_hex": "0x20",
+            "source": "smali_classes12/hk/a.smali",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "family": "capture_flag",
+            "note": "set when method arg p1 > 0"
+          },
+          {
+            "name": "beauty_enabled_flag",
+            "human_readable_name": "Beauty enabled flag",
+            "bit": 2,
+            "bit_hex": "0x2",
+            "source": "smali_classes12/hk/a.smali",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "family": "capture_flag",
+            "note": "beauty value > 0"
+          },
+          {
+            "name": "u4_G_state_flag",
+            "human_readable_name": "u4.G() state flag",
+            "bit": 16,
+            "bit_hex": "0x10",
+            "source": "smali_classes12/hk/a.smali",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "family": "capture_flag",
+            "note": "set when u4.G() true"
+          }
+        ],
+        "exif_tag_bits": [
+          {
+            "name": "EXIF_TAG_SUPPORT_HASSEL_WATER_MARK",
+            "human_readable_name": "Hassel watermark EXIF tag",
+            "bit": 1048576,
+            "bit_hex": "0x100000",
+            "source": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "family": "exif_tag_flag",
+            "note": "named EXIF tag flag"
+          },
+          {
+            "name": "EXIF_TAG_ULTRA_HDR",
+            "human_readable_name": "Ultra HDR EXIF tag",
+            "bit": 2097152,
+            "bit_hex": "0x200000",
+            "source": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali",
+            "family": "exif_tag_flag",
+            "note": "named EXIF tag flag"
+          }
+        ],
+        "tag_map": [
+          {
+            "hex": "0x2",
+            "symbol": "beauty",
+            "human_readable_name": "Beauty mode",
+            "family": "mode",
+            "source_smali": "smali_classes2/yj/a.smali",
+            "note": "shared with cameraId=2 and capture-side beauty flag"
+          },
+          {
+            "hex": "0x10",
+            "symbol": "portrait",
+            "human_readable_name": "Portrait mode",
+            "family": "mode",
+            "source_smali": "smali_classes2/yj/a.smali"
+          },
+          {
+            "hex": "0x20",
+            "symbol": "capture_sub_mode_flag",
+            "human_readable_name": "Capture sub-mode flag",
+            "family": "capture_flag",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "note": "set when method arg p1 > 0"
+          },
+          {
+            "hex": "0x2",
+            "symbol": "beauty_enabled_flag",
+            "human_readable_name": "Beauty enabled flag",
+            "family": "capture_flag",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "note": "beauty value > 0"
+          },
+          {
+            "hex": "0x10",
+            "symbol": "u4_G_state_flag",
+            "human_readable_name": "u4.G() state flag",
+            "family": "capture_flag",
+            "source_smali": "smali_classes12/hk/a.smali",
+            "note": "set when u4.G() true"
+          },
+          {
+            "hex": "0x100000",
+            "symbol": "EXIF_TAG_SUPPORT_HASSEL_WATER_MARK",
+            "human_readable_name": "Hassel watermark EXIF tag",
+            "family": "exif_tag_flag",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali"
+          },
+          {
+            "hex": "0x200000",
+            "symbol": "EXIF_TAG_ULTRA_HDR",
+            "human_readable_name": "Ultra HDR EXIF tag",
+            "family": "exif_tag_flag",
+            "source_smali": "smali_classes31/com/oplus/exif/OplusExifTag.smali"
+          }
+        ],
+        "unknown_bits": [
+          {
+            "bit": 65536,
+            "bit_hex": "0x10000"
+          },
+          {
+            "bit": 134217728,
+            "bit_hex": "0x8000000"
+          }
+        ],
+        "inference_notes": [
+          "master capture path is routed by mode string 'professional'; there is no standalone 'master' bit in Lyj/a.",
+          "master video path uses mode string 'masterVideo', but 'masterVideo' is not in Lyj/a mode-bit map.",
+          "PICTURE_EXIF_FLAG -> EXIF_COMMENTS conversion occurs in lower camera stack (not visible in apk smali).",
+          "absence of 0x100 does not exclude masterVideo; masterVideo commonly appears as cameraId + extra feature flags.",
+          "cameraId is ambiguous from value alone (especially around bit 0x2 overlap); keep candidate set and combine with context.",
+          "bit 0x2 is ambiguous: could be beauty mode bit, beauty-enabled feature flag, or cameraId=2 overlap.",
+          "bit 0x10 is ambiguous: could be portrait mode bit or capture-side u4.G() feature flag.",
+          "named EXIF tag flags present: EXIF_TAG_SUPPORT_HASSEL_WATER_MARK, EXIF_TAG_ULTRA_HDR; these are OplusExifTag constants rather than camera mode bits.",
+          "unmapped residual bits present: 0x10000, 0x8000000; these are not covered by the current APK-derived mode/feature tables."
+        ]
+      }
+    }
+  ]
+}
