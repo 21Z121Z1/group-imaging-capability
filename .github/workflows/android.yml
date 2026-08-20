@@ -111,6 +111,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
+      - name: Assemble baseline app before emulator startup
+        run: gradle --stacktrace --console=plain :app:assembleDebug
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -120,11 +122,9 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          profile: pixel_8
           disable-animations: true
           script: |
             gradle --stacktrace --console=plain :app:connectedDebugAndroidTest
-            gradle --console=plain :app:assembleDebug
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop io.github.z121z1.watermarkcleaner
             adb shell monkey -p io.github.z121z1.watermarkcleaner -c android.intent.category.LAUNCHER 1
@@ -140,6 +140,7 @@ jobs:
             app/build/reports/androidTests/**
             app/build/outputs/androidTest-results/**
             app/build/verification-screenshots/**
+            app/build/outputs/apk/debug/*.apk
 
   material-playground-emulator:
     if: github.ref == 'refs/heads/feature/coloros-material-playground' || github.head_ref == 'feature/coloros-material-playground'
@@ -157,6 +158,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
+      - name: Assemble playground before emulator startup
+        run: gradle --stacktrace --console=plain :material-playground:assembleDebug
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -166,10 +169,8 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          profile: pixel_8
           disable-animations: true
           script: |
-            gradle --stacktrace --console=plain :material-playground:assembleDebug
             adb install -r material-playground/build/outputs/apk/debug/material-playground-debug.apk
             adb shell am force-stop io.github.z121z1.colorosmaterialplayground
             adb shell monkey -p io.github.z121z1.colorosmaterialplayground -c android.intent.category.LAUNCHER 1
