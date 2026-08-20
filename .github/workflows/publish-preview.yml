@@ -1,0 +1,43 @@
+name: Publish verified APK preview
+
+on:
+  push:
+    branches:
+      - feature/unmark-android17-expressive
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download already-verified APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh run download 32389886235 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name unmark-debug-apk \
+            --dir dist
+          test -f dist/app-debug.apk
+
+      - name: Publish direct APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view unmark-preview --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create unmark-preview \
+              --repo "$GITHUB_REPOSITORY" \
+              --prerelease \
+              --title "Unmark Preview" \
+              --notes "Installable preview from verified commit 1f13ad2a9a14de0d1a4fe56476512418ed439959. Unit tests, Android lint, debug APK, instrumentation APK and minified release all passed in Actions run 32389886235."
+          fi
+          gh release upload unmark-preview \
+            --repo "$GITHUB_REPOSITORY" \
+            "dist/app-debug.apk#Unmark-debug.apk" \
+            --clobber
