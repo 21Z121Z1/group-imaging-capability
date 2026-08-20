@@ -63,16 +63,22 @@ class ExperienceActivity : ComponentActivity() {
                     surface = Color(0xE8212630),
                 ),
             ) {
-                ExperienceApp()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                ) {
+                    ExperienceApp()
+                }
             }
         }
     }
 }
 
-private enum class ExperienceScene(val label: String) {
-    Gallery("相册查看器"),
-    ActionSheet("浮动操作面板"),
-    Camera("相机控制条"),
+private enum class ExperienceScene(val label: String, val compactLabel: String) {
+    Gallery("相册查看器", "相册"),
+    ActionSheet("浮动操作面板", "浮层"),
+    Camera("相机控制条", "相机"),
 }
 
 private data class SurfaceStack(
@@ -157,7 +163,7 @@ private fun ExperienceApp() {
                     FilterChip(
                         selected = scene == item,
                         onClick = { scene = item },
-                        label = { Text(item.label) },
+                        label = { Text(if (compact) item.compactLabel else item.label) },
                     )
                 }
             }
@@ -194,9 +200,9 @@ private fun ExperienceApp() {
                 color = Color.Transparent,
             ) {
                 when (scene) {
-                    ExperienceScene.Gallery -> GalleryScene(bridge, photo, catalog.runtimeBacked)
-                    ExperienceScene.ActionSheet -> ActionSheetScene(bridge, photo, catalog.runtimeBacked)
-                    ExperienceScene.Camera -> CameraScene(bridge, photo, catalog.runtimeBacked)
+                    ExperienceScene.Gallery -> GalleryScene(bridge, photo)
+                    ExperienceScene.ActionSheet -> ActionSheetScene(bridge, photo)
+                    ExperienceScene.Camera -> CameraScene(bridge, photo)
                 }
             }
         }
@@ -238,7 +244,6 @@ private fun SceneBackdrop(photo: Bitmap?) {
 private fun GalleryScene(
     bridge: ColorOsMaterialBridge,
     photo: Bitmap?,
-    runtimeBacked: Boolean,
 ) {
     Box(
         modifier = Modifier
@@ -249,12 +254,24 @@ private fun GalleryScene(
 
         VendorGradientBar(
             bridge = bridge,
-            label = "‹              相册              ⋯",
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(76.dp),
         )
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(76.dp)
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("‹", color = Color.White, style = MaterialTheme.typography.titleLarge)
+            Text("相册", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("⋯", color = Color.White, style = MaterialTheme.typography.titleLarge)
+        }
 
         Row(
             modifier = Modifier
@@ -281,8 +298,6 @@ private fun GalleryScene(
                 .fillMaxWidth()
                 .height(68.dp),
         )
-
-        RuntimeBadge(runtimeBacked, Modifier.align(Alignment.TopEnd).padding(10.dp))
     }
 }
 
@@ -290,7 +305,6 @@ private fun GalleryScene(
 private fun ActionSheetScene(
     bridge: ColorOsMaterialBridge,
     photo: Bitmap?,
-    runtimeBacked: Boolean,
 ) {
     Box(
         modifier = Modifier
@@ -353,8 +367,6 @@ private fun ActionSheetScene(
             width = 88.dp,
             height = 50.dp,
         )
-
-        RuntimeBadge(runtimeBacked, Modifier.align(Alignment.TopEnd).padding(10.dp))
     }
 }
 
@@ -362,7 +374,6 @@ private fun ActionSheetScene(
 private fun CameraScene(
     bridge: ColorOsMaterialBridge,
     photo: Bitmap?,
-    runtimeBacked: Boolean,
 ) {
     Box(
         modifier = Modifier
@@ -436,34 +447,31 @@ private fun CameraScene(
             width = 72.dp,
             height = 48.dp,
         )
-
-        RuntimeBadge(runtimeBacked, Modifier.align(Alignment.TopEnd).padding(10.dp))
     }
 }
 
 @Composable
 private fun VendorGradientBar(
     bridge: ColorOsMaterialBridge,
-    label: String,
     modifier: Modifier,
 ) {
     AndroidView(
         factory = {
             MaterialHostView(bridge.materialContext).apply {
                 shapeKind = MaterialShapeKind.Bar
-                setLabel(label)
+                setLabel("")
             }
         },
         update = { host ->
-            val key = "scene-gradient:$label"
+            val key = "scene-gradient"
             if (host.appliedKey != key) {
                 bridge.clear(host)
                 val result = bridge.applyGradientBlur(host, 1f)
-                host.setLabel(label)
+                host.setLabel("")
                 host.contentDescription = if (result.isSuccess) {
-                    "$label · ColorOS gradient blur active"
+                    "ColorOS gradient blur active"
                 } else {
-                    "$label · ColorOS gradient blur unavailable: ${result.exceptionOrNull()?.javaClass?.simpleName}"
+                    "ColorOS gradient blur unavailable: ${result.exceptionOrNull()?.javaClass?.simpleName}"
                 }
                 host.appliedKey = key
             }
@@ -506,7 +514,7 @@ private fun VendorSurface(
                 host.contentDescription = if (failures.isEmpty()) {
                     "$label · ColorOS material stack active"
                 } else {
-                    "$label · ColorOS material unavailable: ${failures.joinToString() }"
+                    "$label · ColorOS material unavailable: ${failures.joinToString()}"
                 }
                 host.appliedKey = key
             }
@@ -555,21 +563,4 @@ private fun VendorToolbarButton(
         },
         modifier = modifier.width(width).height(height),
     )
-}
-
-@Composable
-private fun RuntimeBadge(runtimeBacked: Boolean, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        color = Color(0xA0000000),
-        contentColor = Color.White,
-        shape = RoundedCornerShape(999.dp),
-    ) {
-        Text(
-            if (runtimeBacked) "COLOROS RUNTIME" else "VENDOR API UNAVAILABLE",
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
 }
