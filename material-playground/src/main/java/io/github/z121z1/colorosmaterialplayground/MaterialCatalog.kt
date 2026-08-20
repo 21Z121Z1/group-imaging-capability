@@ -2,6 +2,7 @@ package io.github.z121z1.colorosmaterialplayground
 
 enum class MaterialFamily {
     Blur,
+    GradientBlur,
     Stroke,
     SpotLight,
     ToolbarStack,
