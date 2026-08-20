@@ -394,6 +394,7 @@ private fun FamilySelector(selected: MaterialFamily, onSelected: (MaterialFamily
 private fun SectionTitle(title: String, subtitle: String) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(20.dp),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -583,6 +584,7 @@ private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean
 private fun ControlCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(26.dp),
         tonalElevation = 2.dp,
     ) {
