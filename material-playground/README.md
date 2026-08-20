@@ -27,9 +27,19 @@ For Ultra HDR images the app checks `Bitmap.hasGainmap()`. It requests an HDR wi
 
 The runtime panel also reports screen wide-gamut capability, current window wide-gamut state, supported HDR types, and hardware acceleration.
 
+## CI verification
+
+The `feature/coloros-material-playground` branch is covered by `.github/workflows/android.yml`. The workflow runs:
+
+- `:material-playground:testDebugUnitTest`
+- `:material-playground:lintDebug`
+- `:material-playground:assembleDebug`
+- an API 35 emulator install/launch smoke test in the deliberately unsupported non-ColorOS path
+- APK and screenshot artifact upload
+
 ## Important runtime limitation
 
-GitHub Actions can compile, test, lint, and package this APK, but it cannot validate ColorOS private APIs or HDR luminance because the runner is not a ColorOS 17 device. Runtime success therefore remains intentionally visible in the app itself:
+GitHub Actions can compile, test, lint, package, install, and launch this APK, but it cannot validate ColorOS private APIs or HDR luminance because the runner is not a ColorOS 17 device. Runtime success therefore remains intentionally visible in the app itself:
 
 - installed `com.oplus.uxdesign` version;
 - whether a foreign package code context could be created;
