@@ -108,34 +108,38 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 try {
                     viewModel.uiState
-                        .map { it.calibration is UnmarkViewModel.CalibrationState.Capturing }
+                        .map { state ->
+                            (state.calibration as? UnmarkViewModel.CalibrationState.Capturing)?.mode
+                        }
                         .distinctUntilChanged()
                         .collect(::setCaptureMode)
                 } finally {
-                    setCaptureMode(false)
+                    setCaptureMode(null)
                 }
             }
         }
     }
 
-    private fun setCaptureMode(active: Boolean) {
-        if (active == captureCallbackRegistered) {
-            updateCalibrationChrome(active)
-            return
-        }
-
-        if (active) {
+    private fun setCaptureMode(mode: UnmarkViewModel.CalibrationMode?) {
+        val active = mode != null
+        if (active && !captureCallbackRegistered) {
             registerScreenCaptureCallback(mainExecutor, captureCallback)
             captureCallbackRegistered = true
-        } else if (captureCallbackRegistered) {
+        } else if (!active && captureCallbackRegistered) {
             unregisterScreenCaptureCallback(captureCallback)
             captureCallbackRegistered = false
         }
-        updateCalibrationChrome(active)
+        updateCalibrationChrome(active = active, hdr = mode == UnmarkViewModel.CalibrationMode.HDR)
     }
 
-    private fun updateCalibrationChrome(active: Boolean) {
+    private fun updateCalibrationChrome(active: Boolean, hdr: Boolean) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
+        window.colorMode = if (active && hdr) {
+            ActivityInfo.COLOR_MODE_HDR
+        } else {
+            ActivityInfo.COLOR_MODE_DEFAULT
+        }
+
         if (active) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
