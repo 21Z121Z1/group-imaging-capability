@@ -92,9 +92,14 @@ fun AdaptiveTwoPane(
             }
 
             else -> {
+                // In compact/freeform windows both panes must receive bounded height. Measuring the
+                // secondary LazyColumn without weight lets fillMaxSize consume the whole column and
+                // collapse the preview. Explicit weights keep both surfaces usable while the
+                // secondary pane remains independently scrollable.
                 Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f).fillMaxWidth()) { primary() }
-                    Box(Modifier.fillMaxWidth()) { secondary() }
+                    Box(Modifier.weight(0.9f).fillMaxWidth()) { primary() }
+                    Spacer(Modifier.height(12.dp))
+                    Box(Modifier.weight(1.1f).fillMaxWidth()) { secondary() }
                 }
             }
         }
