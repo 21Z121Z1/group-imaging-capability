@@ -24,6 +24,7 @@ object WatermarkProfileCodec {
         return output.toByteArray()
     }
 
+    /** Writes and flushes a profile without taking ownership of [output]. */
     fun write(profile: WatermarkProfile, output: OutputStream) {
         require(profile.size <= MAX_RECORDS) { "Profile is too large" }
 
@@ -47,11 +48,10 @@ object WatermarkProfileCodec {
 
         val bodyBytes = body.toByteArray()
         val crc = CRC32().apply { update(bodyBytes) }.value.toInt()
-        DataOutputStream(output).use { data ->
-            data.write(bodyBytes)
-            data.writeInt(crc)
-            data.flush()
-        }
+        val data = DataOutputStream(output)
+        data.write(bodyBytes)
+        data.writeInt(crc)
+        data.flush()
     }
 
     fun decode(input: InputStream): WatermarkProfile = decode(readLimited(input))
