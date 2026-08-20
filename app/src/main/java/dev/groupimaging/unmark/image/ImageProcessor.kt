@@ -13,9 +13,15 @@ class ImageProcessor(private val resolver: ContentResolver) {
     data class ProcessedImage(
         val bitmap: Bitmap,
         val wasUltraHdr: Boolean,
+        val usedDedicatedHdrCalibration: Boolean,
     )
 
-    fun decodeAndRemove(uri: Uri, profile: WatermarkProfile): ProcessedImage {
+    fun decodeAndRemove(
+        uri: Uri,
+        sdrProfile: WatermarkProfile?,
+        hdrPrimaryProfile: WatermarkProfile?,
+        hdrGainProfile: WatermarkProfile?,
+    ): ProcessedImage {
         val bitmap = resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
             BitmapFactory.decodeFileDescriptor(
                 descriptor.fileDescriptor,
@@ -27,32 +33,57 @@ class ImageProcessor(private val resolver: ContentResolver) {
             )
         } ?: error("无法解码图片")
 
-        require(profile.matches(bitmap.width, bitmap.height)) {
-            "当前模型为 ${profile.width}×${profile.height}，图片为 ${bitmap.width}×${bitmap.height}，请重新校准"
-        }
+        try {
+            val originalGainmap = bitmap.gainmap
+            if (originalGainmap == null) {
+                val profile = sdrProfile ?: error("请先完成标准水印校准")
+                require(profile.matches(bitmap.width, bitmap.height)) {
+                    "当前标准模型为 ${profile.width}×${profile.height}，图片为 ${bitmap.width}×${bitmap.height}，请重新校准"
+                }
+                applySparseInverse(bitmap, profile)
+                return ProcessedImage(
+                    bitmap = bitmap,
+                    wasUltraHdr = false,
+                    usedDedicatedHdrCalibration = false,
+                )
+            }
 
-        val originalGainmap = bitmap.gainmap
-        applySparseInverse(bitmap, profile)
+            val primaryProfile = hdrPrimaryProfile
+                ?.takeIf { it.matches(bitmap.width, bitmap.height) }
+                ?: sdrProfile?.takeIf { it.matches(bitmap.width, bitmap.height) }
+                ?: error("HDR primary 尺寸与现有校准模型不匹配，请重新进行 HDR 校准")
+            applySparseInverse(bitmap, primaryProfile)
 
-        if (originalGainmap != null) {
-            // ColorOS Ultra HDR screenshots can contain the same visible watermark in the
-            // enhancement layer. Work on a copy so the decoded source remains a stable reference.
-            val cleanedContents = originalGainmap.gainmapContents.copy(Bitmap.Config.ARGB_8888, true)
+            val sourceContents = originalGainmap.gainmapContents
+            val cleanedContents = sourceContents.copy(Bitmap.Config.ARGB_8888, true)
                 ?: error("无法创建可编辑 HDR gain map")
-            GainMapCleaner.clean(cleanedContents, profile)
+            val dedicatedGain = hdrGainProfile?.takeIf {
+                it.matches(cleanedContents.width, cleanedContents.height)
+            }
+            if (dedicatedGain != null) {
+                applySparseInverse(cleanedContents, dedicatedGain)
+            } else {
+                // Safe deterministic fallback for previously calibrated SDR-only devices. A full
+                // HDR calibration supersedes this path with a measured gain-map residual profile.
+                GainMapCleaner.clean(cleanedContents, primaryProfile)
+            }
 
             val replacement = if (Build.VERSION.SDK_INT >= 35) {
-                // Public API 35 constructor copies every gain-map metadata field while replacing
-                // only the enhancement bitmap.
                 Gainmap(originalGainmap, cleanedContents)
             } else {
-                // API 34 has public content mutation but not the metadata-preserving copy ctor.
                 originalGainmap.apply { setGainmapContents(cleanedContents) }
             }
             bitmap.gainmap = replacement
-        }
 
-        return ProcessedImage(bitmap = bitmap, wasUltraHdr = originalGainmap != null)
+            return ProcessedImage(
+                bitmap = bitmap,
+                wasUltraHdr = true,
+                usedDedicatedHdrCalibration = hdrPrimaryProfile === primaryProfile && dedicatedGain != null,
+            )
+        } catch (t: Throwable) {
+            bitmap.recycle()
+            throw t
+        }
     }
 
     internal fun applySparseInverse(bitmap: Bitmap, profile: WatermarkProfile) {
