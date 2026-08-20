@@ -11,10 +11,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -60,7 +58,7 @@ class ExperienceActivity : ComponentActivity() {
                     surface = Color(0xE8212630),
                 ),
             ) {
-                ExperienceApp(this)
+                ExperienceApp()
             }
         }
     }
@@ -79,7 +77,7 @@ private data class SurfaceStack(
 )
 
 @Composable
-private fun ExperienceApp(activity: ExperienceActivity) {
+private fun ExperienceApp() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val bridge = remember { ColorOsMaterialBridge(context.applicationContext) }
@@ -210,7 +208,7 @@ private fun GalleryScene(
     photo: Bitmap?,
     runtimeBacked: Boolean,
 ) {
-    BoxWithConstraints(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(34.dp)),
