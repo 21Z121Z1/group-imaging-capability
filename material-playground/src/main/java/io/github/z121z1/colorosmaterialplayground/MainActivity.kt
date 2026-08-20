@@ -18,12 +18,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -272,12 +270,12 @@ private fun BackgroundLayer(mode: BackgroundMode, photo: Bitmap?) {
     when (mode) {
         BackgroundMode.Generated -> AndroidView(
             factory = { DemoBackdropView(it) },
-            modifier = Modifier.matchParentSize(),
+            modifier = Modifier.fillMaxSize(),
         )
 
         BackgroundMode.HdrPattern -> AndroidView(
             factory = { HdrTestPatternView(it) },
-            modifier = Modifier.matchParentSize(),
+            modifier = Modifier.fillMaxSize(),
         )
 
         BackgroundMode.Photo -> if (photo != null) {
@@ -286,12 +284,12 @@ private fun BackgroundLayer(mode: BackgroundMode, photo: Bitmap?) {
                     ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
                 },
                 update = { it.setImageBitmap(photo) },
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             AndroidView(
                 factory = { DemoBackdropView(it) },
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.fillMaxSize(),
             )
         }
     }
