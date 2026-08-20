@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -43,7 +44,13 @@ class MainActivity : ComponentActivity() {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             runCatching { contentResolver.takePersistableUriPermission(uri, flags) }
                 .onSuccess { viewModel.setOutputTree(uri) }
-                .onFailure { viewModel.setOutputTree(null) }
+                .onFailure {
+                    Toast.makeText(
+                        this,
+                        "无法保留所选目录权限，继续使用原输出位置",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
         }
     }
 
