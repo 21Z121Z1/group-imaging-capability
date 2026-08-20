@@ -5,15 +5,16 @@ import android.graphics.ImageDecoder
 import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -64,7 +66,6 @@ class MainActivity : ComponentActivity() {
                 colorScheme = darkColorScheme(
                     background = Color(0xFF080B12),
                     surface = Color(0xE8212630),
-                    surfaceContainer = Color(0xDD252B36),
                 ),
             ) {
                 Playground(this)
@@ -175,14 +176,9 @@ private fun Playground(activity: MainActivity) {
 
             when (family) {
                 MaterialFamily.Blur -> {
-                    item { SectionTitle("COUIMaterialBlurEffect", "从运行时 BlurEffectType 枚举真实材质 preset") }
+                    item { SectionTitle("COUIMaterialBlurEffect", "运行时 BlurEffectType 枚举；逐项调用真实 ColorOS preset") }
                     items(catalog.blur, key = { "blur:$it" }) { name ->
-                        MaterialPresetCard(
-                            bridge = bridge,
-                            family = family,
-                            name = name,
-                            shape = inferMaterialShape(name),
-                        )
+                        MaterialPresetCard(bridge, family, name, inferMaterialShape(name))
                     }
                 }
 
@@ -203,28 +199,18 @@ private fun Playground(activity: MainActivity) {
                             )
                         }
                     }
-                    item {
-                        GradientBlurPreview(
-                            bridge = bridge,
-                            fraction = gradientFraction,
-                        )
-                    }
+                    item { GradientBlurPreview(bridge, gradientFraction) }
                 }
 
                 MaterialFamily.Stroke -> {
                     item {
                         SectionTitle(
                             "COUIMaterialStrokeEffect",
-                            "Capsule / Circle / Disabled / Framework / Content 全部从 StrokeEffectType 枚举",
+                            "Capsule / Circle / Disabled / Framework / Content 全部来自 StrokeEffectType",
                         )
                     }
                     items(catalog.stroke, key = { "stroke:$it" }) { name ->
-                        MaterialPresetCard(
-                            bridge = bridge,
-                            family = family,
-                            name = name,
-                            shape = inferMaterialShape(name),
-                        )
+                        MaterialPresetCard(bridge, family, name, inferMaterialShape(name))
                     }
                 }
 
@@ -232,16 +218,11 @@ private fun Playground(activity: MainActivity) {
                     item {
                         SectionTitle(
                             "COUISpotLightEffect",
-                            "真实 ColorOS Spotlight drawable；按住并拖动预览材质光源响应",
+                            "真实 ColorOS Spotlight drawable；按住并拖动查看材质光源响应",
                         )
                     }
                     items(catalog.spotLight, key = { "spot:$it" }) { name ->
-                        MaterialPresetCard(
-                            bridge = bridge,
-                            family = family,
-                            name = name,
-                            shape = inferMaterialShape(name),
-                        )
+                        MaterialPresetCard(bridge, family, name, inferMaterialShape(name))
                     }
                 }
 
@@ -249,7 +230,7 @@ private fun Playground(activity: MainActivity) {
                     item {
                         SectionTitle(
                             "Toolbar Material Stack",
-                            "Blur + Stroke + SpotLight + Caustic Shadow，全部由 ToolbarMaterialEffectDelegate 组合",
+                            "Blur + Stroke + SpotLight + Caustic Shadow，由 ToolbarMaterialEffectDelegate 原生组合",
                         )
                     }
                     item {
@@ -281,7 +262,6 @@ private fun Playground(activity: MainActivity) {
                     runtimeBacked = catalog.runtimeBacked,
                 )
             }
-
             item { Spacer(Modifier.height(12.dp)) }
         }
     }
@@ -303,9 +283,7 @@ private fun BackgroundLayer(mode: BackgroundMode, photo: Bitmap?) {
         BackgroundMode.Photo -> if (photo != null) {
             AndroidView(
                 factory = {
-                    ImageView(it).apply {
-                        scaleType = ImageView.ScaleType.CENTER_CROP
-                    }
+                    ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
                 },
                 update = { it.setImageBitmap(photo) },
                 modifier = Modifier.matchParentSize(),
@@ -379,7 +357,9 @@ private fun BackgroundControls(
             style = MaterialTheme.typography.bodySmall,
         )
         displaySummary.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-        photoError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        photoError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -459,11 +439,13 @@ private fun MaterialPresetCard(
                     host.shapeKind = shape
                     if (host.appliedKey != key) {
                         bridge.clear(host)
-                        val result = when (family) {
+                        val result: Result<Unit> = when (family) {
                             MaterialFamily.Blur -> bridge.applyBlur(host, name)
                             MaterialFamily.Stroke -> bridge.applyStroke(host, name)
                             MaterialFamily.SpotLight -> bridge.applySpotLight(host, name)
-                            else -> Result.failure(IllegalArgumentException("Unsupported preset family: $family"))
+                            else -> Result.failure(
+                                IllegalArgumentException("Unsupported preset family: $family"),
+                            )
                         }
                         host.setLabel(
                             if (result.isSuccess) {
@@ -576,7 +558,11 @@ private fun DiagnosticsCard(diagnostics: List<String>, runtimeBacked: Boolean) {
     ControlCard {
         Text("Runtime probe", style = MaterialTheme.typography.titleMedium)
         Text(
-            if (runtimeBacked) "APK code loader 已成功枚举真实 ColorOS classes。" else "当前只显示 APK 提取 catalog；下面的 probe 会指出阻断层。",
+            if (runtimeBacked) {
+                "APK code loader 已成功枚举真实 ColorOS classes。"
+            } else {
+                "当前只显示 APK 提取 catalog；下面的 probe 会指出运行时阻断层。"
+            },
             style = MaterialTheme.typography.bodySmall,
         )
         diagnostics.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -596,7 +582,7 @@ private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean
 }
 
 @Composable
-private fun ControlCard(content: @Composable Column.() -> Unit) {
+private fun ControlCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
         shape = RoundedCornerShape(26.dp),
