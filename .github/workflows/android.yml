@@ -12,7 +12,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -47,6 +47,12 @@ jobs:
 
       - name: Assemble debug APK
         run: gradle --no-daemon :app:assembleDebug --stacktrace
+
+      - name: Compile instrumentation APK
+        run: gradle --no-daemon :app:assembleDebugAndroidTest --stacktrace
+
+      - name: Assemble minified release
+        run: gradle --no-daemon :app:assembleRelease --stacktrace
 
       - name: Upload verification reports
         if: always()
