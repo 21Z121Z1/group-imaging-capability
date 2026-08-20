@@ -7,9 +7,15 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-class ProfileRepository(context: Context) {
+class ProfileRepository(
+    context: Context,
+    profileName: String = "active",
+) {
     private val directory = File(context.filesDir, "profiles").apply { mkdirs() }
-    private val profileFile = File(directory, "active.wmr2")
+    private val safeName = profileName.also {
+        require(it.matches(Regex("[a-z0-9_-]{1,40}"))) { "Invalid profile name" }
+    }
+    private val profileFile = File(directory, "$safeName.wmr2")
 
     fun load(): WatermarkProfile? {
         if (!profileFile.isFile) return null
@@ -24,7 +30,7 @@ class ProfileRepository(context: Context) {
      */
     fun save(profile: WatermarkProfile) {
         val bytes = WatermarkProfileCodec.encode(profile)
-        val temp = File(directory, ".active-${System.nanoTime()}.tmp")
+        val temp = File(directory, ".$safeName-${System.nanoTime()}.tmp")
         try {
             FileOutputStream(temp).use { output ->
                 output.write(bytes)
