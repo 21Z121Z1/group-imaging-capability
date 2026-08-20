@@ -31,6 +31,8 @@ class MaterialHostView(context: android.content.Context) : FrameLayout(context) 
         setPadding(dp(12), dp(8), dp(12), dp(8))
     }
 
+    var appliedKey: String? = null
+
     var shapeKind: MaterialShapeKind = MaterialShapeKind.Generic
         set(value) {
             field = value
