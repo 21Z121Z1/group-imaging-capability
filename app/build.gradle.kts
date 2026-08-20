@@ -49,7 +49,7 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom-alpha:2026.08.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.08.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
@@ -62,8 +62,8 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
+    implementation("androidx.compose.material3:material3:1.5.0-alpha26")
+    implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.5.0-alpha26")
     implementation("androidx.compose.material3.adaptive:adaptive:1.3.0")
     implementation("androidx.compose.material3.adaptive:adaptive-layout:1.3.0")
 
