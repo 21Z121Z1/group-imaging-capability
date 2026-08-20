@@ -3,7 +3,9 @@ package dev.groupimaging.unmark.image
 import android.content.ContentResolver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Gainmap
 import android.net.Uri
+import android.os.Build
 import dev.groupimaging.unmark.model.AffineMath
 import dev.groupimaging.unmark.model.WatermarkProfile
 
@@ -29,11 +31,28 @@ class ImageProcessor(private val resolver: ContentResolver) {
             "当前模型为 ${profile.width}×${profile.height}，图片为 ${bitmap.width}×${bitmap.height}，请重新校准"
         }
 
-        val gainmap = bitmap.gainmap
+        val originalGainmap = bitmap.gainmap
         applySparseInverse(bitmap, profile)
-        if (gainmap != null) bitmap.gainmap = gainmap
 
-        return ProcessedImage(bitmap = bitmap, wasUltraHdr = gainmap != null)
+        if (originalGainmap != null) {
+            // ColorOS Ultra HDR screenshots can contain the same visible watermark in the
+            // enhancement layer. Work on a copy so the decoded source remains a stable reference.
+            val cleanedContents = originalGainmap.gainmapContents.copy(Bitmap.Config.ARGB_8888, true)
+                ?: error("无法创建可编辑 HDR gain map")
+            GainMapCleaner.clean(cleanedContents, profile)
+
+            val replacement = if (Build.VERSION.SDK_INT >= 35) {
+                // Public API 35 constructor copies every gain-map metadata field while replacing
+                // only the enhancement bitmap.
+                Gainmap(originalGainmap, cleanedContents)
+            } else {
+                // API 34 has public content mutation but not the metadata-preserving copy ctor.
+                originalGainmap.apply { setGainmapContents(cleanedContents) }
+            }
+            bitmap.gainmap = replacement
+        }
+
+        return ProcessedImage(bitmap = bitmap, wasUltraHdr = originalGainmap != null)
     }
 
     internal fun applySparseInverse(bitmap: Bitmap, profile: WatermarkProfile) {
