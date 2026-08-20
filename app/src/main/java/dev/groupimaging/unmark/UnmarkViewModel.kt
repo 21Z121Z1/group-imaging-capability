@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.groupimaging.unmark.calibration.CalibrationEngine
+import dev.groupimaging.unmark.calibration.HdrCalibrationEngine
 import dev.groupimaging.unmark.data.AppSettings
 import dev.groupimaging.unmark.image.ImageProcessor
 import dev.groupimaging.unmark.image.OutputWriter
@@ -26,21 +27,33 @@ import kotlinx.coroutines.launch
 
 class UnmarkViewModel(application: Application) : AndroidViewModel(application) {
     enum class JobStatus { Queued, Processing, Done, Failed }
+    enum class CalibrationMode { SDR, HDR }
 
     data class ImageJob(
         val uri: Uri,
         val status: JobStatus = JobStatus.Queued,
         val outputUri: Uri? = null,
         val wasUltraHdr: Boolean = false,
+        val usedDedicatedHdrCalibration: Boolean = false,
         val ultraHdrVerified: Boolean? = null,
         val error: String? = null,
     )
 
     sealed interface CalibrationState {
         data object Idle : CalibrationState
-        data class Capturing(val index: Int, val level: Int) : CalibrationState
-        data object Fitting : CalibrationState
-        data class Complete(val pixels: Int, val width: Int, val height: Int) : CalibrationState
+        data class Capturing(
+            val index: Int,
+            val level: Int,
+            val mode: CalibrationMode,
+        ) : CalibrationState
+        data class Fitting(val mode: CalibrationMode) : CalibrationState
+        data class Complete(
+            val mode: CalibrationMode,
+            val pixels: Int,
+            val width: Int,
+            val height: Int,
+            val gainPixels: Int = 0,
+        ) : CalibrationState
         data class Error(val message: String) : CalibrationState
     }
 
@@ -55,6 +68,8 @@ class UnmarkViewModel(application: Application) : AndroidViewModel(application) 
         val jobs: List<ImageJob> = emptyList(),
         val calibration: CalibrationState = CalibrationState.Idle,
         val profile: WatermarkProfile? = null,
+        val hdrPrimaryProfile: WatermarkProfile? = null,
+        val hdrGainProfile: WatermarkProfile? = null,
         val mediaAccess: MediaAccess = MediaAccess.PickerOnly,
         val jpegQuality: Int = 90,
         val outputTree: Uri? = null,
@@ -64,15 +79,20 @@ class UnmarkViewModel(application: Application) : AndroidViewModel(application) 
 
     private val app = application.applicationContext
     private val settings = AppSettings(app)
-    private val profiles = ProfileRepository(app)
+    private val profiles = ProfileRepository(app, "active")
+    private val hdrPrimaryProfiles = ProfileRepository(app, "hdr-primary")
+    private val hdrGainProfiles = ProfileRepository(app, "hdr-gain")
     private val processor = ImageProcessor(app.contentResolver)
     private val writer = OutputWriter(app, settings)
     private val calibrationEngine = CalibrationEngine(app.contentResolver)
+    private val hdrCalibrationEngine = HdrCalibrationEngine(app, calibrationEngine)
     private val screenshotFinder = ScreenshotFinder(app)
 
     private val _uiState = MutableStateFlow(
         UiState(
             profile = profiles.load(),
+            hdrPrimaryProfile = hdrPrimaryProfiles.load(),
+            hdrGainProfile = hdrGainProfiles.load(),
             mediaAccess = MediaAccess.current(app),
             jpegQuality = settings.jpegQuality,
             outputTree = settings.outputTreeUri,
@@ -105,21 +125,29 @@ class UnmarkViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun processQueued() {
-        val profile = _uiState.value.profile
-        if (profile == null) {
-            _uiState.update { it.copy(message = "请先完成水印校准") }
+        val startState = _uiState.value
+        if (startState.profile == null && startState.hdrPrimaryProfile == null) {
+            _uiState.update { it.copy(message = "请先完成标准或 HDR 水印校准") }
             return
         }
-        if (_uiState.value.busy) return
+        if (startState.busy) return
 
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(busy = true, message = null) }
             try {
-                val uris = _uiState.value.jobs.filter { it.status == JobStatus.Queued || it.status == JobStatus.Failed }.map { it.uri }
+                val uris = _uiState.value.jobs
+                    .filter { it.status == JobStatus.Queued || it.status == JobStatus.Failed }
+                    .map { it.uri }
                 for (uri in uris) {
                     mutateJob(uri) { it.copy(status = JobStatus.Processing, error = null) }
                     try {
-                        val processed = processor.decodeAndRemove(uri, profile)
+                        val profilesState = _uiState.value
+                        val processed = processor.decodeAndRemove(
+                            uri = uri,
+                            sdrProfile = profilesState.profile,
+                            hdrPrimaryProfile = profilesState.hdrPrimaryProfile,
+                            hdrGainProfile = profilesState.hdrGainProfile,
+                        )
                         try {
                             val output = writer.write(processed.bitmap, processed.wasUltraHdr)
                             mutateJob(uri) {
@@ -127,6 +155,7 @@ class UnmarkViewModel(application: Application) : AndroidViewModel(application) 
                                     status = JobStatus.Done,
                                     outputUri = output.uri,
                                     wasUltraHdr = processed.wasUltraHdr,
+                                    usedDedicatedHdrCalibration = processed.usedDedicatedHdrCalibration,
                                     ultraHdrVerified = output.ultraHdrVerified,
                                 )
                             }
@@ -167,15 +196,15 @@ class UnmarkViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(mediaAccess = MediaAccess.current(app)) }
     }
 
-    fun startCalibration(canUseFullScreen: Boolean) {
+    fun startCalibration(mode: CalibrationMode, canUseFullScreen: Boolean) {
         if (!canUseFullScreen) {
             _uiState.update {
-                it.copy(calibration = CalibrationState.Error("校准必须在全屏窗口中进行；请先退出分屏/系统小窗"))
+                it.copy(calibration = CalibrationState.Error("逐像素校准必须在全屏窗口中进行；请先退出分屏/系统小窗"))
             }
             return
         }
         calibrationUris.clear()
-        beginCapture(0)
+        beginCapture(index = 0, mode = mode)
     }
 
     fun cancelCalibration() {
@@ -197,16 +226,17 @@ class UnmarkViewModel(application: Application) : AndroidViewModel(application) 
 
         val expectedStartedAt = captureStartedAt
         viewModelScope.launch(Dispatchers.IO) {
-            var uri: Uri? = null
+            var found: Uri? = null
             repeat(8) {
-                if (uri == null) {
+                if (found == null) {
                     delay(250L)
-                    uri = runCatching { screenshotFinder.findRecent(expectedStartedAt) }.getOrNull()
+                    found = runCatching { screenshotFinder.findRecent(expectedStartedAt) }.getOrNull()
                 }
             }
             importInFlight = false
+            val uri = found
             if (uri != null && _uiState.value.calibration == state) {
-                acceptCalibrationUri(uri!!)
+                acceptCalibrationUri(uri)
             } else if (_uiState.value.calibration == state) {
                 _effects.tryEmit(Effect.PickCalibrationImage)
             }
@@ -224,43 +254,93 @@ class UnmarkViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun acceptCalibrationUri(uri: Uri) {
+        val capture = _uiState.value.calibration as? CalibrationState.Capturing ?: return
         calibrationUris += uri
-        if (calibrationUris.size < AffineMath.calibrationLevels.size) {
-            beginCapture(calibrationUris.size)
-        } else {
-            _uiState.update { it.copy(calibration = CalibrationState.Fitting) }
-            val inputs = calibrationUris.toList()
-            viewModelScope.launch(Dispatchers.Default) {
-                runCatching {
-                    val profile = calibrationEngine.fit(inputs)
-                    require(profile.size > 0) { "未检测到稳定水印，请确认六张截图顺序与显示比例一致" }
-                    profiles.save(profile)
-                    profile
-                }.onSuccess { profile ->
-                    _uiState.update {
-                        it.copy(
-                            profile = profile,
-                            calibration = CalibrationState.Complete(profile.size, profile.width, profile.height),
-                        )
-                    }
-                }.onFailure { error ->
-                    _uiState.update {
-                        it.copy(calibration = CalibrationState.Error(error.message ?: "校准失败"))
-                    }
-                }
+        val levelCount = levelsFor(capture.mode).size
+        if (calibrationUris.size < levelCount) {
+            beginCapture(calibrationUris.size, capture.mode)
+            return
+        }
+
+        _uiState.update { it.copy(calibration = CalibrationState.Fitting(capture.mode)) }
+        val inputs = calibrationUris.toList()
+        viewModelScope.launch(Dispatchers.Default) {
+            when (capture.mode) {
+                CalibrationMode.SDR -> fitSdr(inputs)
+                CalibrationMode.HDR -> fitHdr(inputs)
             }
         }
     }
 
-    private fun beginCapture(index: Int) {
+    private fun fitSdr(inputs: List<Uri>) {
+        runCatching {
+            val profile = calibrationEngine.fit(inputs)
+            require(profile.size > 0) { "未检测到稳定水印，请确认六张截图顺序与显示比例一致" }
+            profiles.save(profile)
+            profile
+        }.onSuccess { profile ->
+            _uiState.update {
+                it.copy(
+                    profile = profile,
+                    calibration = CalibrationState.Complete(
+                        mode = CalibrationMode.SDR,
+                        pixels = profile.size,
+                        width = profile.width,
+                        height = profile.height,
+                    ),
+                )
+            }
+        }.onFailure(::publishCalibrationError)
+    }
+
+    private fun fitHdr(inputs: List<Uri>) {
+        runCatching {
+            val result = hdrCalibrationEngine.fit(inputs)
+            hdrPrimaryProfiles.save(result.primary)
+            hdrGainProfiles.save(result.gainmap)
+            result
+        }.onSuccess { result ->
+            _uiState.update {
+                it.copy(
+                    hdrPrimaryProfile = result.primary,
+                    hdrGainProfile = result.gainmap,
+                    calibration = CalibrationState.Complete(
+                        mode = CalibrationMode.HDR,
+                        pixels = result.primary.size,
+                        width = result.primary.width,
+                        height = result.primary.height,
+                        gainPixels = result.gainmap.size,
+                    ),
+                )
+            }
+        }.onFailure(::publishCalibrationError)
+    }
+
+    private fun publishCalibrationError(error: Throwable) {
+        _uiState.update {
+            it.copy(calibration = CalibrationState.Error(error.message ?: "校准失败"))
+        }
+    }
+
+    private fun beginCapture(index: Int, mode: CalibrationMode) {
         captureStartedAt = System.currentTimeMillis()
         importInFlight = false
+        val levels = levelsFor(mode)
         _uiState.update {
             it.copy(
-                calibration = CalibrationState.Capturing(index, AffineMath.calibrationLevels[index]),
+                calibration = CalibrationState.Capturing(
+                    index = index,
+                    level = levels[index],
+                    mode = mode,
+                ),
                 message = null,
             )
         }
+    }
+
+    private fun levelsFor(mode: CalibrationMode): IntArray = when (mode) {
+        CalibrationMode.SDR -> AffineMath.calibrationLevels
+        CalibrationMode.HDR -> HdrCalibrationEngine.GAIN_LEVELS
     }
 
     private fun mutateJob(uri: Uri, transform: (ImageJob) -> ImageJob) {
