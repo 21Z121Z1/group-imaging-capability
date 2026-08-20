@@ -2,7 +2,7 @@ package dev.groupimaging.unmark.image
 
 import android.content.ContentResolver
 import android.graphics.Bitmap
-import android.graphics.ImageDecoder
+import android.graphics.BitmapFactory
 import android.net.Uri
 import dev.groupimaging.unmark.model.AffineMath
 import dev.groupimaging.unmark.model.WatermarkProfile
@@ -14,11 +14,16 @@ class ImageProcessor(private val resolver: ContentResolver) {
     )
 
     fun decodeAndRemove(uri: Uri, profile: WatermarkProfile): ProcessedImage {
-        val source = ImageDecoder.createSource(resolver, uri)
-        val bitmap = ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            decoder.isMutableRequired = true
-        }
+        val bitmap = resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+            BitmapFactory.decodeFileDescriptor(
+                descriptor.fileDescriptor,
+                null,
+                BitmapFactory.Options().apply {
+                    inMutable = true
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                },
+            )
+        } ?: error("无法解码图片")
 
         require(profile.matches(bitmap.width, bitmap.height)) {
             "当前模型为 ${profile.width}×${profile.height}，图片为 ${bitmap.width}×${bitmap.height}，请重新校准"
