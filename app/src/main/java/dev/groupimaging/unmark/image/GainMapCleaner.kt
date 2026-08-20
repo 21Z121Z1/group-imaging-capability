@@ -2,6 +2,7 @@ package dev.groupimaging.unmark.image
 
 import android.graphics.Bitmap
 import dev.groupimaging.unmark.model.WatermarkProfile
+import java.util.BitSet
 
 /**
  * Deterministic, non-generative fallback for Ultra HDR enhancement layers.
@@ -11,6 +12,9 @@ import dev.groupimaging.unmark.model.WatermarkProfile
  * primary watermark support into gain-map coordinates and replace only those samples with the
  * per-channel median of a nearby non-watermark ring. All gain-map metadata is preserved by the
  * caller; this object only edits the enhancement bitmap.
+ *
+ * Memory is intentionally sparse: one source pixel buffer, a BitSet mask, and replacement arrays
+ * sized to the watermark support. We do not allocate a second full-size gain-map buffer.
  */
 object GainMapCleaner {
     private const val MAX_RADIUS = 6
@@ -22,8 +26,10 @@ object GainMapCleaner {
 
         val width = gainContents.width
         val height = gainContents.height
-        val pixelCount = width * height
-        val mask = BooleanArray(pixelCount)
+        val pixelCountLong = width.toLong() * height.toLong()
+        require(pixelCountLong <= Int.MAX_VALUE) { "Gain map is too large" }
+        val pixelCount = pixelCountLong.toInt()
+        val mask = BitSet(pixelCount)
 
         for (record in primaryProfile.indices.indices) {
             val primaryIndex = primaryProfile.indices[record]
@@ -37,21 +43,25 @@ object GainMapCleaner {
                 if (y !in 0 until height) continue
                 for (dx in -1..1) {
                     val x = gx + dx
-                    if (x in 0 until width) mask[y * width + x] = true
+                    if (x in 0 until width) mask.set(y * width + x)
                 }
             }
         }
 
+        val affectedCount = mask.cardinality()
+        if (affectedCount == 0) return
+
         val pixels = IntArray(pixelCount)
         gainContents.getPixels(pixels, 0, width, 0, 0, width, height)
-        val replacements = IntArray(pixelCount)
-        val replacementMask = BooleanArray(pixelCount)
+        val replacementIndices = IntArray(affectedCount)
+        val replacementValues = IntArray(affectedCount)
         val rs = IntArray(256)
         val gs = IntArray(256)
         val bs = IntArray(256)
+        var replacementCount = 0
 
-        for (index in mask.indices) {
-            if (!mask[index]) continue
+        var index = mask.nextSetBit(0)
+        while (index >= 0) {
             val x = index % width
             val y = index / width
             var count = 0
@@ -90,13 +100,17 @@ object GainMapCleaner {
                 val red = median(rs, count)
                 val green = median(gs, count)
                 val blue = median(bs, count)
-                replacements[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
-                replacementMask[index] = true
+                replacementIndices[replacementCount] = index
+                replacementValues[replacementCount] =
+                    (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+                replacementCount++
             }
+            if (index == Int.MAX_VALUE) break
+            index = mask.nextSetBit(index + 1)
         }
 
-        for (index in pixels.indices) {
-            if (replacementMask[index]) pixels[index] = replacements[index]
+        for (i in 0 until replacementCount) {
+            pixels[replacementIndices[i]] = replacementValues[i]
         }
         gainContents.setPixels(pixels, 0, width, 0, 0, width, height)
     }
