@@ -25,6 +25,8 @@ class ColorOsMaterialBridge(appContext: Context) {
         private const val SPOTLIGHT_DRAWABLE = "com.coui.appcompat.spotlight.a"
         private const val TOOLBAR_DELEGATE = "com.coui.appcompat.toolbar.ToolbarMaterialEffectDelegate"
         private const val TOOLBAR_CATEGORY = "com.coui.appcompat.toolbar.ToolbarMaterialEffectDelegate\$ViewCategory"
+        private const val APP_BAR_BLUR_HELPER = "com.coui.appcompat.toolbar.AppBarBlurHelper"
+        private const val GRADIENT_BLUR_CONFIG = "com.coui.appcompat.toolbar.AppBarBlurHelper\$GradientBlurConfig"
     }
 
     private val hostContext = appContext.applicationContext
@@ -66,6 +68,7 @@ class ColorOsMaterialBridge(appContext: Context) {
         add("installed version: $installedVersion")
         add("foreign package code context: ${if (packageCodeLoaded) "loaded" else "unavailable"}")
         add("COUIMaterialBlurEffect: ${status(BLUR_CLASS)}")
+        add("AppBarBlurHelper / gradient blur: ${status(APP_BAR_BLUR_HELPER)}")
         add("COUIMaterialStrokeEffect: ${status(STROKE_CLASS)}")
         add("COUISpotLightEffect: ${status(SPOTLIGHT_CLASS)}")
         add("ToolbarMaterialEffectDelegate: ${status(TOOLBAR_DELEGATE)}")
@@ -79,6 +82,39 @@ class ColorOsMaterialBridge(appContext: Context) {
 
     fun applyStroke(view: View, typeName: String): Result<Unit> =
         applyCompanionPreset(STROKE_CLASS, STROKE_ENUM, view, typeName)
+
+    /**
+     * Uses ColorOS' real AppBarBlurHelper path. The no-arg GradientBlurConfig is
+     * deliberately vendor-owned; updateGradientBlurFraction then exposes the
+     * same runtime fraction control used by COUI app bars.
+     */
+    fun applyGradientBlur(view: View, fraction: Float): Result<Unit> = runCatching {
+        val helperClass = load(APP_BAR_BLUR_HELPER)
+        val configClass = load(GRADIENT_BLUR_CONFIG)
+        val helper = helperClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
+        val config = configClass.getDeclaredConstructor().apply { isAccessible = true }.newInstance()
+        invokeExact(helper, "setGradientBlurConfig", arrayOf(View::class.java, configClass), view, config)
+        invokeExact(helper, "setUpGradientBlurBackground", arrayOf(View::class.java), view)
+        invokeExact(
+            helper,
+            "updateGradientBlurFraction",
+            arrayOf(View::class.java, Float::class.javaPrimitiveType!!),
+            view,
+            fraction.coerceIn(0f, 1f),
+        )
+        retained[view] = helper
+    }
+
+    fun updateGradientBlur(view: View, fraction: Float): Result<Unit> = runCatching {
+        val helper = retained[view] ?: error("Gradient blur is not attached to this view")
+        invokeExact(
+            helper,
+            "updateGradientBlurFraction",
+            arrayOf(View::class.java, Float::class.javaPrimitiveType!!),
+            view,
+            fraction.coerceIn(0f, 1f),
+        )
+    }
 
     fun applySpotLight(view: View, typeName: String): Result<Unit> = runCatching {
         val enumClass = load(SPOTLIGHT_ENUM)
@@ -165,6 +201,10 @@ class ColorOsMaterialBridge(appContext: Context) {
         runCatching {
             retained.remove(view)?.let { retainedObject ->
                 retainedObject.javaClass.declaredMethods
+                    .firstOrNull { it.name == "clearGradientBlur" && it.parameterCount == 1 }
+                    ?.apply { isAccessible = true }
+                    ?.invoke(retainedObject, view)
+                retainedObject.javaClass.declaredMethods
                     .firstOrNull { it.name == "removeAllEffects" && it.parameterCount == 0 }
                     ?.apply { isAccessible = true }
                     ?.invoke(retainedObject)
@@ -201,6 +241,12 @@ class ColorOsMaterialBridge(appContext: Context) {
         val method = receiver.javaClass.declaredMethods.firstOrNull { candidate ->
             candidate.name == name && candidate.parameterCount == args.size
         } ?: error("${receiver.javaClass.name}.$name not found")
+        method.isAccessible = true
+        method.invoke(receiver, *args)
+    }
+
+    private fun invokeExact(receiver: Any, name: String, types: Array<Class<*>>, vararg args: Any) {
+        val method = receiver.javaClass.getDeclaredMethod(name, *types)
         method.isAccessible = true
         method.invoke(receiver, *args)
     }
