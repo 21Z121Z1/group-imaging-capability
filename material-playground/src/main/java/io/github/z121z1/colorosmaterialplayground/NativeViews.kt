@@ -11,7 +11,6 @@ import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.Typeface
-import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.view.Gravity
 import android.view.View
@@ -42,7 +41,7 @@ class MaterialHostView(context: android.content.Context) : FrameLayout(context) 
 
     init {
         setWillNotDraw(false)
-        background = ColorDrawable(Color.TRANSPARENT)
+        setBackgroundColor(Color.TRANSPARENT)
         isClickable = true
         isFocusable = true
         addView(
@@ -76,23 +75,32 @@ class MaterialHostView(context: android.content.Context) : FrameLayout(context) 
 
 class DemoBackdropView(context: android.content.Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var gradient: LinearGradient? = null
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        gradient = if (w > 0 && h > 0) {
+            LinearGradient(
+                0f,
+                0f,
+                w.toFloat(),
+                h.toFloat(),
+                intArrayOf(
+                    Color.rgb(22, 38, 83),
+                    Color.rgb(119, 75, 162),
+                    Color.rgb(32, 150, 194),
+                    Color.rgb(247, 183, 51),
+                ),
+                floatArrayOf(0f, 0.34f, 0.7f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+        } else {
+            null
+        }
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val gradient = LinearGradient(
-            0f,
-            0f,
-            width.toFloat(),
-            height.toFloat(),
-            intArrayOf(
-                Color.rgb(22, 38, 83),
-                Color.rgb(119, 75, 162),
-                Color.rgb(32, 150, 194),
-                Color.rgb(247, 183, 51),
-            ),
-            floatArrayOf(0f, 0.34f, 0.7f, 1f),
-            Shader.TileMode.CLAMP,
-        )
         paint.shader = gradient
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
         paint.shader = null
