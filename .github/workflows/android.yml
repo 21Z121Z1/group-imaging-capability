@@ -1,12 +1,10 @@
 name: Android
 
 on:
-  push:
-    branches:
-      - feature/unmark-android17-expressive
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
