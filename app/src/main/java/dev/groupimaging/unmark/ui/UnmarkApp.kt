@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,11 +72,15 @@ fun UnmarkApp(viewModel: UnmarkViewModel) {
     val capture = state.calibration as? UnmarkViewModel.CalibrationState.Capturing
     if (capture != null) {
         BackHandler { viewModel.cancelCalibration() }
-        CalibrationCaptureSurface(capture.level)
+        when (capture.mode) {
+            UnmarkViewModel.CalibrationMode.SDR -> CalibrationCaptureSurface(capture.level)
+            UnmarkViewModel.CalibrationMode.HDR -> HdrCalibrationCaptureSurface(capture.level)
+        }
         return
     }
 
-    var destination by remember { mutableStateOf(Destination.Process) }
+    var destinationName by rememberSaveable { mutableStateOf(Destination.Process.name) }
+    val destination = Destination.entries.firstOrNull { it.name == destinationName } ?: Destination.Process
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
     val navigationType = NavigationSuiteScaffoldDefaults.navigationSuiteType(adaptiveInfo)
     val snackbar = remember { SnackbarHostState() }
@@ -93,7 +98,7 @@ fun UnmarkApp(viewModel: UnmarkViewModel) {
                 NavigationSuiteItem(
                     navigationSuiteType = navigationType,
                     selected = destination == item,
-                    onClick = { destination = item },
+                    onClick = { destinationName = item.name },
                     icon = {
                         Icon(
                             imageVector = when (item) {
@@ -235,7 +240,17 @@ private fun ProcessControls(state: UnmarkViewModel.UiState, viewModel: UnmarkVie
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("处理", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (state.profile == null) "尚未校准" else "模型 ${state.profile.width}×${state.profile.height} · ${state.profile.size} px",
+                        buildString {
+                            append(state.profile?.let { "SDR ${it.width}×${it.height} · ${it.size} px" } ?: "SDR 未校准")
+                            append("\n")
+                            append(
+                                if (state.hdrPrimaryProfile != null && state.hdrGainProfile != null) {
+                                    "HDR primary ${state.hdrPrimaryProfile.size} px · gain ${state.hdrGainProfile.size} px"
+                                } else {
+                                    "HDR 未专门校准"
+                                },
+                            )
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Button(
@@ -279,7 +294,10 @@ private fun ProcessControls(state: UnmarkViewModel.UiState, viewModel: UnmarkVie
                                 UnmarkViewModel.JobStatus.Processing -> "处理中"
                                 UnmarkViewModel.JobStatus.Done -> buildString {
                                     append("完成")
-                                    if (job.wasUltraHdr) append(if (job.ultraHdrVerified == true) " · HDR 已验证" else " · HDR 未验证")
+                                    if (job.wasUltraHdr) {
+                                        append(if (job.usedDedicatedHdrCalibration) " · HDR 专用校准" else " · HDR fallback")
+                                        append(if (job.ultraHdrVerified == true) " · gain map 已验证" else " · gain map 验证失败")
+                                    }
                                 }
                                 UnmarkViewModel.JobStatus.Failed -> "失败 · ${job.error.orEmpty()}"
                             },
@@ -300,6 +318,9 @@ private fun ProcessControls(state: UnmarkViewModel.UiState, viewModel: UnmarkVie
 private fun CalibrationPage(state: UnmarkViewModel.UiState, viewModel: UnmarkViewModel) {
     val activity = LocalActivity.current
     val calibration = state.calibration
+    val canUseFullScreen = activity?.isInMultiWindowMode == false
+    val fitting = calibration is UnmarkViewModel.CalibrationState.Fitting
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -307,7 +328,7 @@ private fun CalibrationPage(state: UnmarkViewModel.UiState, viewModel: UnmarkVie
         item {
             Text("校准", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
             Text(
-                "六档已知灰阶逐像素拟合 Y = aX + b。截图监听只在纯色捕获面开启；完整照片权限仅用于自动取得刚生成的 Screenshot。",
+                "标准模式用六档灰阶逐像素拟合 Y = aX + b；HDR 模式会把窗口切换到 HDR，显示真正的 gain-map 探针，并分别校准截图 primary 与 gain map。截图监听只在捕获面开启。",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -332,9 +353,17 @@ private fun CalibrationPage(state: UnmarkViewModel.UiState, viewModel: UnmarkVie
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("当前模型", style = MaterialTheme.typography.titleMedium)
+                    Text("模型状态", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        state.profile?.let { "${it.width}×${it.height} · ${it.size} 个水印像素" } ?: "尚未校准",
+                        state.profile?.let { "标准：${it.width}×${it.height} · ${it.size} px" } ?: "标准：未校准",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        if (state.hdrPrimaryProfile != null && state.hdrGainProfile != null) {
+                            "HDR：primary ${state.hdrPrimaryProfile.size} px · gain ${state.hdrGainProfile.size} px"
+                        } else {
+                            "HDR：未专门校准"
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -343,9 +372,15 @@ private fun CalibrationPage(state: UnmarkViewModel.UiState, viewModel: UnmarkVie
         item {
             when (calibration) {
                 UnmarkViewModel.CalibrationState.Idle -> Unit
-                UnmarkViewModel.CalibrationState.Fitting -> Text("正在拟合并验证模型…")
+                is UnmarkViewModel.CalibrationState.Fitting -> Text(
+                    if (calibration.mode == UnmarkViewModel.CalibrationMode.HDR) "正在拟合 HDR primary 与 gain map…" else "正在拟合并验证标准模型…",
+                )
                 is UnmarkViewModel.CalibrationState.Complete -> Text(
-                    "校准完成：${calibration.width}×${calibration.height}，${calibration.pixels} 个有效水印像素",
+                    if (calibration.mode == UnmarkViewModel.CalibrationMode.HDR) {
+                        "HDR 校准完成：primary ${calibration.pixels} px · gain ${calibration.gainPixels} px"
+                    } else {
+                        "标准校准完成：${calibration.width}×${calibration.height} · ${calibration.pixels} px"
+                    },
                     color = MaterialTheme.colorScheme.primary,
                 )
                 is UnmarkViewModel.CalibrationState.Error -> Text(
@@ -357,11 +392,30 @@ private fun CalibrationPage(state: UnmarkViewModel.UiState, viewModel: UnmarkVie
         }
         item {
             Button(
-                onClick = { viewModel.startCalibration(canUseFullScreen = activity?.isInMultiWindowMode == false) },
-                enabled = calibration !is UnmarkViewModel.CalibrationState.Fitting,
+                onClick = {
+                    viewModel.startCalibration(
+                        mode = UnmarkViewModel.CalibrationMode.SDR,
+                        canUseFullScreen = canUseFullScreen,
+                    )
+                },
+                enabled = !fitting,
                 modifier = Modifier.fillMaxWidth().height(64.dp),
             ) {
-                Text("开始六灰阶校准")
+                Text("开始标准六灰阶校准")
+            }
+        }
+        item {
+            FilledTonalButton(
+                onClick = {
+                    viewModel.startCalibration(
+                        mode = UnmarkViewModel.CalibrationMode.HDR,
+                        canUseFullScreen = canUseFullScreen,
+                    )
+                },
+                enabled = !fitting,
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+            ) {
+                Text("激活 HDR 并校准")
             }
         }
     }
@@ -373,9 +427,7 @@ private fun SettingsPage(state: UnmarkViewModel.UiState, viewModel: UnmarkViewMo
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            Text("设置", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
-        }
+        item { Text("设置", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold) }
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -413,7 +465,10 @@ private fun SettingsPage(state: UnmarkViewModel.UiState, viewModel: UnmarkViewMo
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Ultra HDR", style = MaterialTheme.typography.titleMedium)
-                    Text("处理前缓存 Gainmap，修改 SDR primary 后重新挂回，并在导出后重新解码检查 gain map。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "专用 HDR 校准会分别逆变换 primary 与 gain-map contents；导出后再解码验证 gain map 仍存在。未做 HDR 校准时才使用确定性的邻域中值 fallback。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -421,7 +476,10 @@ private fun SettingsPage(state: UnmarkViewModel.UiState, viewModel: UnmarkViewMo
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("ColorOS 小窗 / 自由窗口", style = MaterialTheme.typography.titleMedium)
-                    Text("普通处理界面实时响应窗口尺寸与折叠 posture；只有逐像素校准要求全屏。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "普通处理界面实时响应窗口尺寸与折叠 posture；逐像素校准要求全屏，避免小窗缩放改变屏幕坐标。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
