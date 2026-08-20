@@ -145,7 +145,11 @@ class ColorOsMaterialBridge(appContext: Context) {
             runCatching { motionMethod?.invoke(configured, event) }
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> touchedView.isPressed = true
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touchedView.isPressed = false
+                MotionEvent.ACTION_UP -> {
+                    touchedView.isPressed = false
+                    touchedView.performClick()
+                }
+                MotionEvent.ACTION_CANCEL -> touchedView.isPressed = false
             }
             true
         }
