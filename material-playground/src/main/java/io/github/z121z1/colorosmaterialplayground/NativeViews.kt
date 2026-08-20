@@ -26,7 +26,7 @@ class MaterialHostView(context: android.content.Context) : FrameLayout(context) 
         setTextColor(Color.WHITE)
         textSize = 11f
         gravity = Gravity.CENTER
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.MEDIUM)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         setShadowLayer(3f, 0f, 1f, Color.argb(140, 0, 0, 0))
         setPadding(dp(12), dp(8), dp(12), dp(8))
     }
