@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -163,6 +163,11 @@ private class ColorOsTextButtonView(
  * A production surface whose visual layer is ColorOS' actual material View.
  * Compose remains responsible for semantics/layout/content while the vendor
  * View provides blur, material stroke and SDF corner rendering underneath.
+ *
+ * The vendor View is deliberately matchParentSize rather than fillMaxSize: it
+ * must paint the size chosen by Compose content, never participate in measuring
+ * the parent. Using fillMaxSize here can make an intrinsically sized floating
+ * surface (notably the bottom navigation bar) expand to the whole window.
  */
 @Composable
 fun ColorOsMaterialSurface(
@@ -196,7 +201,7 @@ fun ColorOsMaterialSurface(
         AndroidView(
             factory = { ColorOsMaterialLayerView(activeBridge.materialContext, activeBridge) },
             update = { it.configure(role, corner) },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.matchParentSize(),
         )
         Column(Modifier.padding(contentPadding), content = content)
     }
