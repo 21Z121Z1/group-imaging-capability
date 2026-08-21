@@ -34,25 +34,35 @@ public final class MainActivity extends Activity {
         root.addView(title, matchWrap());
         root.addView(spacer(10));
         root.addView(text(
-                "Three paths isolate app-owned continuation from system-owned seamless transitions.",
+                "Four paths separate content-level shared-element morphing, app-owned continuation, and system-owned ColorOS transitions.",
                 16, false), matchWrap());
         root.addView(spacer(30));
 
-        root.addView(section("A · In-app seamless handoff",
+        root.addView(section("A · Shared-element predictive morph",
+                "This is the visible seamless case: a detail image + title morph back into the exact measured thumbnail + title on the previous list. A second no-match row is included for A/B comparison."));
+        Button shared = button("Open shared-element lab");
+        shared.setOnClickListener(v -> startActivity(
+                new Intent(this, SharedElementMorphActivity.class)));
+        root.addView(shared, buttonParams());
+        root.addView(spacer(28));
+
+        root.addView(section("B · In-app seamless handoff",
                 "The app consumes Back only while an internal detail layer is visible. Gesture progress owns the transform; after commit, the animator continues from the exact last progress instead of resetting."));
         Button inApp = button("Open in-app handoff demo");
-        inApp.setOnClickListener(v -> startActivity(new Intent(this, InAppSeamlessActivity.class)));
+        inApp.setOnClickListener(v -> startActivity(
+                new Intent(this, InAppSeamlessActivity.class)));
         root.addView(inApp, buttonParams());
         root.addView(spacer(28));
 
-        root.addView(section("B · System cross-activity",
+        root.addView(section("C · System cross-activity",
                 "This screen registers no back callback and overrides no transition. Swipe back from the next Activity so ColorOS / Android Shell can own the predictive transition end to end."));
         Button system = button("Open system-owned Activity");
-        system.setOnClickListener(v -> startActivity(new Intent(this, SystemBackActivity.class)));
+        system.setOnClickListener(v -> startActivity(
+                new Intent(this, SystemBackActivity.class)));
         root.addView(system, buttonParams());
         root.addView(spacer(28));
 
-        root.addView(section("C · Back to Home",
+        root.addView(section("D · Back to Home",
                 "Return to this launcher Activity, then swipe back to the desktop. MainActivity deliberately does not intercept Back. If ColorOS marks the package eligible, its Launcher predictive-continuous / icon-morph path remains unobstructed."));
 
         setContentView(scroll);
@@ -62,7 +72,8 @@ public final class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(18), dp(18), dp(18), dp(18));
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        android.graphics.drawable.GradientDrawable bg =
+                new android.graphics.drawable.GradientDrawable();
         bg.setColor(Color.WHITE);
         bg.setCornerRadius(dp(22));
         box.setBackground(bg);
@@ -70,7 +81,8 @@ public final class MainActivity extends Activity {
         box.addView(spacer(8));
         box.addView(text(body, 15, false), matchWrap());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
         box.setLayoutParams(lp);
         return box;
     }
@@ -102,7 +114,8 @@ public final class MainActivity extends Activity {
 
     private LinearLayout.LayoutParams matchWrap() {
         return new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
     }
 
     private LinearLayout.LayoutParams buttonParams() {
