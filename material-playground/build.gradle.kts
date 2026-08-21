@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "io.github.z121z1.watermarkcleaner"
+    namespace = "io.github.z121z1.colorosmaterialplayground"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "io.github.z121z1.watermarkcleaner"
+        applicationId = "io.github.z121z1.colorosmaterialplayground"
         minSdk = 34
         targetSdk = 37
         versionCode = 1
@@ -33,13 +33,8 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 
-    testOptions {
-        unitTests.isIncludeAndroidResources = true
-    }
-
     lint {
         abortOnError = true
-        checkReleaseBuilds = true
         warningsAsErrors = false
     }
 }
@@ -57,24 +52,16 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.19.0")
     implementation("androidx.activity:activity-compose:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
-
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3:1.5.0-alpha26")
-    implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.5.0-alpha26")
-    implementation("androidx.compose.material3.adaptive:adaptive:1.3.0")
-    implementation("androidx.compose.material3.adaptive:adaptive-layout:1.3.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
-
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

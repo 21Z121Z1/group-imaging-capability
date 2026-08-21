@@ -14,5 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "WatermarkCleaner"
+rootProject.name = "GroupImagingCapability"
 include(":app")
+include(":material-playground")
