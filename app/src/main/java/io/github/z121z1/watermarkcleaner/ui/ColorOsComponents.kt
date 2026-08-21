@@ -22,17 +22,16 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.z121z1.watermarkcleaner.platform.ColorOsSurfaceRole
 import io.github.z121z1.watermarkcleaner.platform.ColorOsUiBridge
+import io.github.z121z1.watermarkcleaner.platform.OplusViewSeamlessCompat
 import kotlin.math.min
 
 enum class ColorOsCornerProfile(val radius: Dp?, val weight: Float) {
@@ -133,11 +132,15 @@ private class ColorOsTextButtonView(
             bridge.applySurface(this, role)
             applyCorner()
         }
+        if (enabled) OplusViewSeamlessCompat.registerWhenLaidOut(this)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        if (w != oldw || h != oldh) applyCorner()
+        if (w != oldw || h != oldh) {
+            applyCorner()
+            if (isEnabled) OplusViewSeamlessCompat.registerWhenLaidOut(this)
+        }
     }
 
     private fun applyCorner() {
@@ -146,6 +149,7 @@ private class ColorOsTextButtonView(
     }
 
     override fun onDetachedFromWindow() {
+        OplusViewSeamlessCompat.clear(this)
         bridge.clear(this)
         super.onDetachedFromWindow()
     }
@@ -166,15 +170,14 @@ fun ColorOsMaterialSurface(
     contentPadding: PaddingValues = PaddingValues(18.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val bridge = LocalColorOsUiBridge.current
-    val vendor = bridge?.runtimeInfo?.available == true
+    val activeBridge = LocalColorOsUiBridge.current?.takeIf { it.runtimeInfo.available }
     val radius = when (corner) {
         ColorOsCornerProfile.CAPSULE, ColorOsCornerProfile.CIRCLE -> 999.dp
         else -> corner.radius ?: 24.dp
     }
     val composeShape = RoundedCornerShape(radius)
 
-    if (!vendor || bridge == null) {
+    if (activeBridge == null) {
         Surface(
             modifier = modifier,
             shape = composeShape,
@@ -189,7 +192,7 @@ fun ColorOsMaterialSurface(
 
     Box(modifier.clip(composeShape)) {
         AndroidView(
-            factory = { ColorOsMaterialLayerView(bridge.materialContext, bridge) },
+            factory = { ColorOsMaterialLayerView(activeBridge.materialContext, activeBridge) },
             update = { it.configure(role, corner) },
             modifier = Modifier.fillMaxSize(),
         )
@@ -207,14 +210,13 @@ fun ColorOsActionButton(
     fallbackOutlined: Boolean = false,
     onNativeView: ((View) -> Unit)? = null,
 ) {
-    val bridge = LocalColorOsUiBridge.current
-    val vendor = bridge?.runtimeInfo?.available == true
+    val activeBridge = LocalColorOsUiBridge.current?.takeIf { it.runtimeInfo.available }
     val textColor = when (role) {
         ColorOsSurfaceRole.PRIMARY_BUTTON, ColorOsSurfaceRole.CHIP_SELECTED -> MaterialTheme.colorScheme.onPrimary
         else -> MaterialTheme.colorScheme.onSurface
     }
 
-    if (!vendor || bridge == null) {
+    if (activeBridge == null) {
         if (fallbackOutlined) {
             OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier) { Text(text) }
         } else {
@@ -231,7 +233,7 @@ fun ColorOsActionButton(
     val stableClick = remember(onClick) { onClick }
     AndroidView(
         factory = {
-            ColorOsTextButtonView(bridge.materialContext, bridge).also { view ->
+            ColorOsTextButtonView(activeBridge.materialContext, activeBridge).also { view ->
                 onNativeView?.invoke(view)
             }
         },
