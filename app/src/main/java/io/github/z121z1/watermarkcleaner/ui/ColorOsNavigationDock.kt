@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
@@ -16,6 +15,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.z121z1.watermarkcleaner.platform.ColorOsSurfaceRole
 
+private val FloatingBarHeight = 64.dp
+private val FloatingBarItemHeight = 52.dp
+
+/**
+ * ColorOS-style floating bottom navigation.
+ *
+ * The bar is one capsule material surface. Items live inside that surface and
+ * only their local selected/unselected material changes; no item is allowed to
+ * own or measure the window-sized parent surface.
+ */
 @Composable
 fun ColorOsNavigationDock(
     labels: List<String>,
@@ -38,25 +47,23 @@ fun ColorOsNavigationDock(
     }
 
     ColorOsMaterialSurface(
-        modifier = modifier,
+        modifier = modifier.height(FloatingBarHeight),
         role = ColorOsSurfaceRole.BOTTOM_BAR,
         corner = ColorOsCornerProfile.CAPSULE,
         contentPadding = PaddingValues(6.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(FloatingBarItemHeight),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             labels.forEachIndexed { index, label ->
+                val selected = index == selectedIndex
                 ColorOsActionButton(
                     text = label,
                     onClick = { onSelect(index) },
-                    role = if (index == selectedIndex) {
-                        ColorOsSurfaceRole.CHIP_SELECTED
-                    } else {
-                        ColorOsSurfaceRole.CHIP
-                    },
-                    modifier = Modifier.weight(1f).height(46.dp),
+                    role = if (selected) ColorOsSurfaceRole.CHIP_SELECTED else ColorOsSurfaceRole.CHIP,
+                    fallbackOutlined = !selected,
+                    modifier = Modifier.weight(1f).height(FloatingBarItemHeight),
                     onNativeView = { nativeViews[index] = it },
                 )
             }
