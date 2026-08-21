@@ -242,6 +242,9 @@ public final class SharedElementMorphActivity extends Activity {
     private void createDetailLayers() {
         detailBackground = new View(this);
         detailBackground.setBackgroundColor(Color.rgb(250, 250, 252));
+        // Full-screen touch blocker: keep the measured destination list geometrically stable
+        // while detail content owns navigation. Edge navigation still belongs to the system.
+        detailBackground.setClickable(true);
         detailBackground.setVisibility(View.GONE);
         root.addView(detailBackground, full());
 
