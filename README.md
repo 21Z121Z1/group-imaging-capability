@@ -1,76 +1,133 @@
-# ColorOS Predictive Back Lab
+# ColorOS OEM Predictive Back / Seamless Lab
 
-A small Android 17 test app for separating **content-level predictive shared-element morphs**, **app-owned predictive-back continuation**, and **system-owned ColorOS seamless transitions**.
+This Android 17 test app now separates **real ColorOS-owned animation paths** from **app/framework comparison implementations**.
 
-The implementation is adapted from the idea demonstrated by [`JacobHu0723/PredictiveBackGesture`](https://github.com/JacobHu0723/PredictiveBackGesture) (MIT): bind visual state to predictive-back progress. This repository adds explicit commit/cancel continuation, a measured shared-element destination lab, and—critically—stops consuming Back at navigation roots so ColorOS Shell/Launcher can own cross-activity and back-to-home transitions.
+The important correction is that ColorOS has more than one mechanism commonly described as "seamless":
 
-## Why this shape
+1. **SystemUI/Shell predictive continuous** — task/window SurfaceControl leash state is handed from predictive Back into the next default/remote transition.
+2. **ColorOS Launcher predictive close** — the task/window is continued into Launcher-owned app-close/icon morph logic.
+3. **ColorOS Gallery content seamless** — Gallery keeps a trigger-view protocol with a measured source Rect, drawing bitmap, and corner radius and performs its own grid/photo morph.
+4. **Android/app shared-element comparison** — useful as a control only; it is not the ColorOS OEM implementation.
 
-There are two different things that are often both called "seamless":
+## Reverse-engineered ColorOS 17 evidence
 
-1. **Timeline continuity**: the frame at gesture release is handed directly to the completion animation without resetting.
-2. **Content continuity**: a visual object on the detail screen has a known destination object on the previous screen, so its geometry can morph back into that exact image/card/title.
+From the supplied ColorOS 17 APKs:
 
-The first does not require corresponding content. The second does.
+### SystemUI / Shell
 
-ColorOS 17's private Shell continuation machinery is system/signature-only. A normal APK should not reflectively call `ShellContinuousTransitionController`, `AdaptiveSmoothShellAnimManager`, or Launcher internals. The useful compatibility contract is instead ownership discipline:
+`com.android.systemui` contains:
 
-1. While an app-internal detail layer owns Back, `BackEvent.progress` drives its transform.
-2. On commit, the completion animator starts from the exact last gesture progress; there is no reset frame.
-3. For a shared-element path, the list destination stays composed underneath and its source bounds are measured before the detail transition.
-4. Once internal navigation is complete, the app unregisters its callback.
-5. Activity-to-Activity and root-to-Home Back are left untouched so Android/ColorOS Shell can run predictive system animations and launcher icon morphs.
+- `BackAnimationController`
+- `BackAnimationController.BackTransitionHandler`
+- `AdaptiveSmoothShellAnimManager`
+- `com.oplus.transition.ShellContinuousTransitionController`
+- `com.oplus.transition.SpringSlideAnimationController`
+
+The OEM controller contains explicit predictive-continuous operations including:
+
+- `matchPredictiveContinuous(...)`
+- `prepareBackAnimContinueIfNeed(...)`
+- `mergeContinuousBackTransitionIfNeed(...)`
+- `setBackAnimContinuous(...)`
+- `setBackPredictiveToRemoteContinuous(...)`
+- `setRemoteToBackAnimContinuous(...)`
+- `adjustFinishTransactionForPredictive(...)`
+
+It carries transformation/alpha/corner-radius state across transition boundaries and applies it to real `SurfaceControl` leashes.
+
+### Oplus WCT / Transition extension markers
+
+ColorOS also ships `com.oplus.transition.SharedReflectionHelper`, which accesses ColorOS framework extension objects such as:
+
+- `android.window.OplusWCTExtendInfo`
+- `android.window.OplusTransitionExtendedInfo`
+
+and methods including:
+
+- `setContinuousTransition(WindowContainerTransaction, boolean)`
+- `setBackAnimContinuous(WindowContainerTransaction, boolean)`
+- `setIsPredictiveBackAnimation(...)`
+
+These are OEM extensions, not Android SDK shared-element APIs. A normal third-party Activity does not own the Shell `WindowContainerTransaction`/transition leash, so the lab does not copy these classes and pretend it is invoking the system controller. Instead, the real Shell test leaves transition ownership with SystemUI.
+
+### Launcher
+
+ColorOS Launcher contains:
+
+- `LauncherBackAnimationController`
+- `PredictiveBackCloseAnimatorCreator`
+- `PredictiveBackAnimRequest`
+- `OplusLauncherAppTransitionHelper.startAppCloseWindowAnim(...)`
+
+and explicit predictive-continuous feature gating through `persist.wm.enable.predictive.continuous` plus seamless eligibility/fallback logic.
+
+### Gallery content seamless
+
+The supplied ColorOS Gallery contains its own `SeamlessTransitionAnimation`. Its transition setup passes:
+
+- `seamless_trigger_view_getter`
+- `seamless_trigger_view_radius`
+- `seamless_trigger_view_drawing_bitmap`
+
+`TriggerViewRectGetter` provides the real source-view screen geometry. The animation code also uses COUI interpolators. This is the ColorOS content-level "corresponding element" mechanism, separate from Android shared-element transitions.
 
 ## Test matrix
 
-### A. Content-level shared-element predictive morph
+### A · REAL ColorOS Shell predictive continuous
 
-Open **Shared-element lab**.
+Open **REAL ColorOS Shell probe** and edge-swipe Back.
 
-The screen has two rows:
+`SystemBackActivity` intentionally installs no `OnBackAnimationCallback`, no `overridePendingTransition()`, no RemoteAnimation and no app-owned shared-element animator. On ColorOS 17, SystemUI/Shell owns the task leash and can execute:
 
-- **MATCHED DESTINATION / Azure Ridge**: the detail hero image and title use the exact measured geometry of the thumbnail and title as their predictive-back destination.
-- **NO MATCH / Unmatched Detail**: the detail page uses only a generic scale/fade continuation. There is deliberately no destination element.
+```text
+BackAnimationController
+  → BackTransitionHandler
+  → AdaptiveSmoothShellAnimManager
+  → ShellContinuousTransitionController
+  → SpringSlideAnimationController / default continuation
+```
 
-For the matched path:
+This is the real OEM system path.
 
-- Forward navigation visibly expands the thumbnail into the detail hero.
-- During edge-back, `BackEvent.progress` directly controls hero scale/translation, title scale/translation, corner radius, destination reveal, and non-shared detail content alpha.
-- The list remains rendered underneath.
-- At `progress=1`, the moving hero/title are at the exact measured source geometry.
-- Commit continues from the last progress and then atomically reveals the original list elements while removing the overlay.
-- Cancellation continues from the last progress back to the detail geometry.
+### B · REAL ColorOS Gallery content seamless
 
-This is the demo to use when evaluating whether "the previous page needs corresponding content" for a real content morph.
+Tap **Open ColorOS Gallery → tap a photo → swipe back**.
 
-### B. In-app seamless handoff
+The app launches the installed `com.coloros.gallery3d`. Inside Gallery, tap a thumbnail to enter the photo page, then edge-swipe Back. The grid/photo transition is Gallery's own content seamless implementation, so this is the cleanest way to observe ColorOS's trigger-view Rect/bitmap/radius mechanism together with Gallery's predictive-back handling.
 
-Open **In-app handoff demo** and swipe back slowly.
+### C · REAL ColorOS Launcher predictive close
 
-- During the gesture, telemetry reads `phase=gesture`.
-- Release to commit: it changes to `phase=commit-continuation` and continues from the current geometry.
-- Abort the gesture: it uses `phase=cancel-settle` and returns to the original state.
-- After a successful internal back, the callback is unregistered. A second edge-back is system-owned.
+Launch this lab from the home screen. While `MainActivity` is the root Activity, edge-swipe Back to Home.
 
-### C. System cross-activity predictive back
+`MainActivity` does not intercept root Back. If the package/build passes ColorOS eligibility gates, Launcher can run its real predictive-close path and continue the task toward the matching launcher icon.
 
-Open **System-owned Activity**, then edge-swipe back.
+### D · ANDROID COMPARISON · shared-element morph
 
-`SystemBackActivity` contains no `OnBackInvokedCallback`, no `OnBackAnimationCallback`, no `overridePendingTransition()`, and no remote animation. This is intentionally the clean path for comparing ColorOS Shell behavior.
+This is the previous app-side matched image/title demo. It remains only as a visual comparison. It is **not** the ColorOS OEM seamless implementation.
 
-### D. ColorOS back-to-home / Launcher handoff
+### E · APP COMPARISON · gesture/commit handoff
 
-Launch the app from the home screen and, while on `MainActivity`, edge-swipe back to Home. `MainActivity` does not consume Back. On a ColorOS build/package that passes the vendor eligibility gates, Launcher is free to run its predictive-continuous close/icon-morph path.
+This demonstrates only temporal continuity from the last `BackEvent.progress` into a completion animator. It is also **not** the ColorOS OEM controller.
 
-## Implementation note
+## Capability probe
 
-The shared-element lab intentionally uses framework Views and GPU transforms rather than bringing in a navigation framework. The matched hero keeps a fixed 4:3 backing size and interpolates scale/translation to the measured 4:3 list thumbnail, which avoids per-frame relayout. The title is treated as a second shared element. Only corner-radius redraw and ordinary property changes occur during progress.
+The main screen reports whether the device exposes:
 
-This mirrors the current Android guidance conceptually: shared content has stable identities/destinations, predictive back controls a pre-commit/deferred phase, and the completion transition takes over without a reset.
+- `oplus.software.adaptive_smooth_animation`
+- `android.window.OplusWCTExtendInfo`
+- `android.window.OplusTransitionExtendedInfo`
+
+This does not mutate hidden framework state; it only confirms whether the ColorOS framework extension surface exists on the running build.
+
+## Why the lab does not directly instantiate ShellContinuousTransitionController
+
+`ShellContinuousTransitionController` lives in the SystemUI/Shell process and operates on real system transition objects and SurfaceControl leashes. Copying or reflectively loading the class into a normal app process would not give the app ownership of those objects and would not exercise the real ColorOS transition pipeline.
+
+The correct third-party test is therefore to create a transition scene and leave ownership with ColorOS SystemUI/Launcher, while using an actual ColorOS app (Gallery) for the content-level seamless path.
 
 ## Build
 
-The project targets Android 17 / API 37 and uses AGP 9.3 with Gradle 9.5, matching the repository CI.
+The project targets Android 17 / API 37 and uses AGP 9.3 with Gradle 9.5.
 
 ```bash
 gradle :app:assembleDebug
@@ -82,6 +139,6 @@ APK output:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Upstream
+## Upstream comparison sample
 
-See `THIRD_PARTY_NOTICES.md` for the upstream MIT attribution.
+The Android/app-owned comparison path was originally adapted from the MIT-licensed `JacobHu0723/PredictiveBackGesture` idea. See `THIRD_PARTY_NOTICES.md`.
