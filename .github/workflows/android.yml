@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/watermark-cleaner-android17
+      - feature/watermark-cleaner-coloros17
   pull_request:
 
 permissions:
@@ -25,8 +26,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - name: Install Android 37 platform
-        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37" "platform-tools"
+      - name: Install Android 17 / API 37 platform
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
@@ -53,11 +54,13 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - name: Install Android build platform
-        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37" "platform-tools"
+      - name: Install Android 17 / API 37 platform
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
+      - name: Assemble app before emulator startup
+        run: gradle --stacktrace --console=plain :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -67,15 +70,13 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          profile: pixel_8
           disable-animations: true
           script: |
             gradle --stacktrace --console=plain :app:connectedDebugAndroidTest
-            gradle --console=plain :app:assembleDebug
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am force-stop io.github.z121z1.watermarkcleaner
             adb shell monkey -p io.github.z121z1.watermarkcleaner -c android.intent.category.LAUNCHER 1
-            sleep 3
+            sleep 4
             mkdir -p app/build/verification-screenshots
             adb exec-out screencap -p > app/build/verification-screenshots/home.png
       - uses: actions/upload-artifact@v4
@@ -87,3 +88,4 @@ jobs:
             app/build/reports/androidTests/**
             app/build/outputs/androidTest-results/**
             app/build/verification-screenshots/**
+            app/build/outputs/apk/debug/*.apk
