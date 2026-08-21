@@ -22,10 +22,11 @@ import kotlinx.coroutines.launch
  * App-level equivalent of ColorOS' predictive -> continuous handoff principle.
  *
  * Gesture progress owns the transform during interaction. On commit we keep the
- * last progress and spring from that exact state to 1 before changing logical
- * navigation state. A cancelled gesture springs back from its current value
- * instead of snapping to zero. Root Activity back is intentionally not handled
- * here so ColorOS Shell/Launcher can own predictive-continuous back-to-home.
+ * last progress and velocity and spring from that exact state to 1 before
+ * changing logical navigation state. A cancelled gesture springs back from its
+ * current value instead of snapping to zero. Root Activity back is intentionally
+ * not handled here so ColorOS Shell/Launcher can own predictive-continuous
+ * back-to-home.
  */
 @Stable
 data class PredictiveBackHandoffSnapshot(
@@ -44,19 +45,30 @@ fun rememberPredictiveBackHandoff(
 
     PredictiveBackHandler(enabled = enabled) { events: Flow<BackEventCompat> ->
         active = true
+        var lastProgress = progress.value
+        var lastTimestampNanos = System.nanoTime()
+        var progressVelocity = 0f
+
         try {
             events.collect { event ->
-                progress.snapTo(event.progress.coerceIn(0f, 1f))
+                val now = System.nanoTime()
+                val next = event.progress.coerceIn(0f, 1f)
+                val dtSeconds = (now - lastTimestampNanos).coerceAtLeast(1L) / 1_000_000_000f
+                progressVelocity = ((next - lastProgress) / dtSeconds).coerceIn(-8f, 8f)
+                lastProgress = next
+                lastTimestampNanos = now
+                progress.snapTo(next)
             }
 
-            // Ownership handoff: continue from the gesture's final transform;
-            // never reset to zero before committing the navigation state.
+            // Ownership handoff: continue from the gesture's final transform
+            // and velocity; never reset to zero before committing navigation.
             progress.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioNoBouncy,
                     stiffness = Spring.StiffnessMediumLow,
                 ),
+                initialVelocity = progressVelocity,
             )
             onCommit()
             progress.snapTo(0f)
@@ -64,7 +76,7 @@ fun rememberPredictiveBackHandoff(
         } catch (cancelled: CancellationException) {
             // PredictiveBackHandler cancels this coroutine for a cancelled
             // gesture. Recover in the composition scope so the visual surface
-            // continues smoothly from its exact cancellation state.
+            // continues smoothly from its exact cancellation state/velocity.
             recoveryScope.launch {
                 progress.animateTo(
                     targetValue = 0f,
@@ -72,6 +84,7 @@ fun rememberPredictiveBackHandoff(
                         dampingRatio = Spring.DampingRatioNoBouncy,
                         stiffness = Spring.StiffnessMedium,
                     ),
+                    initialVelocity = progressVelocity,
                 )
                 active = false
             }
