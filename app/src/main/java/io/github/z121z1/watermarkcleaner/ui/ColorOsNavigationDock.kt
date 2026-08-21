@@ -15,15 +15,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.z121z1.watermarkcleaner.platform.ColorOsSurfaceRole
 
-private val FloatingBarHeight = 64.dp
-private val FloatingBarItemHeight = 52.dp
+private val FloatingBarHeight = 58.dp
+private val FloatingBarItemHeight = 46.dp
 
 /**
  * ColorOS-style floating bottom navigation.
  *
- * The bar is one capsule material surface. Items live inside that surface and
- * only their local selected/unselected material changes; no item is allowed to
- * own or measure the window-sized parent surface.
+ * The outer capsule owns the navigation material. Unselected items remain
+ * visually quiet; only the selected destination receives a local chip material.
  */
 @Composable
 fun ColorOsNavigationDock(
@@ -61,8 +60,12 @@ fun ColorOsNavigationDock(
                 ColorOsActionButton(
                     text = label,
                     onClick = { onSelect(index) },
-                    role = if (selected) ColorOsSurfaceRole.CHIP_SELECTED else ColorOsSurfaceRole.CHIP,
-                    fallbackOutlined = !selected,
+                    role = if (selected) {
+                        ColorOsSurfaceRole.CHIP_SELECTED
+                    } else {
+                        ColorOsSurfaceRole.TRANSPARENT_BUTTON
+                    },
+                    fallbackOutlined = false,
                     modifier = Modifier.weight(1f).height(FloatingBarItemHeight),
                     onNativeView = { nativeViews[index] = it },
                 )
