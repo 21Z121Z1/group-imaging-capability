@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -94,6 +95,7 @@ private class ColorOsMaterialLayerView(
 private class ColorOsTextButtonView(
     context: Context,
     private val bridge: ColorOsUiBridge,
+    private val seamlessHostContext: Context,
 ) : FrameLayout(context) {
     private val label = TextView(context).apply {
         gravity = Gravity.CENTER
@@ -132,14 +134,14 @@ private class ColorOsTextButtonView(
             bridge.applySurface(this, role)
             applyCorner()
         }
-        if (enabled) OplusViewSeamlessCompat.registerWhenLaidOut(this)
+        if (enabled) OplusViewSeamlessCompat.registerWhenLaidOut(this, seamlessHostContext)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w != oldw || h != oldh) {
             applyCorner()
-            if (isEnabled) OplusViewSeamlessCompat.registerWhenLaidOut(this)
+            if (isEnabled) OplusViewSeamlessCompat.registerWhenLaidOut(this, seamlessHostContext)
         }
     }
 
@@ -210,6 +212,7 @@ fun ColorOsActionButton(
     fallbackOutlined: Boolean = false,
     onNativeView: ((View) -> Unit)? = null,
 ) {
+    val hostContext = LocalContext.current
     val activeBridge = LocalColorOsUiBridge.current?.takeIf { it.runtimeInfo.available }
     val textColor = when (role) {
         ColorOsSurfaceRole.PRIMARY_BUTTON, ColorOsSurfaceRole.CHIP_SELECTED -> MaterialTheme.colorScheme.onPrimary
@@ -233,9 +236,11 @@ fun ColorOsActionButton(
     val stableClick = remember(onClick) { onClick }
     AndroidView(
         factory = {
-            ColorOsTextButtonView(activeBridge.materialContext, activeBridge).also { view ->
-                onNativeView?.invoke(view)
-            }
+            ColorOsTextButtonView(
+                context = activeBridge.materialContext,
+                bridge = activeBridge,
+                seamlessHostContext = hostContext,
+            ).also { view -> onNativeView?.invoke(view) }
         },
         update = { view ->
             view.configure(
