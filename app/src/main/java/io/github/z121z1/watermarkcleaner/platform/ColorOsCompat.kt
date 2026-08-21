@@ -14,6 +14,8 @@ object ColorOsCompat {
     /**
      * Lightweight platform detection for window-level capabilities. ColorOS
      * UXDesign material/SDF/animation access lives in [ColorOsUiBridge].
+     * Predictive-continuous gate inspection lives in
+     * [ColorOsPredictiveBackDiagnostics] and is diagnostic only.
      */
     fun detect(context: Context): PlatformUiCapabilities {
         val brand = "${Build.MANUFACTURER} ${Build.BRAND}".lowercase()
