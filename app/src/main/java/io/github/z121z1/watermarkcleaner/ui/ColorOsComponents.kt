@@ -23,7 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
@@ -49,6 +48,8 @@ private class ColorOsMaterialLayerView(
 ) : View(context) {
     private var role: ColorOsSurfaceRole? = null
     private var corner: ColorOsCornerProfile? = null
+    private var fillColor: Int? = null
+    private var materialAlpha: Float = 1f
 
     init {
         setBackgroundColor(AndroidColor.TRANSPARENT)
@@ -56,10 +57,20 @@ private class ColorOsMaterialLayerView(
         isFocusable = false
     }
 
-    fun configure(newRole: ColorOsSurfaceRole, newCorner: ColorOsCornerProfile) {
-        val changed = role != newRole || corner != newCorner
+    fun configure(
+        newRole: ColorOsSurfaceRole,
+        newCorner: ColorOsCornerProfile,
+        newFillColor: Int?,
+        newMaterialAlpha: Float,
+    ) {
+        val changed = role != newRole ||
+            corner != newCorner ||
+            fillColor != newFillColor ||
+            materialAlpha != newMaterialAlpha
         role = newRole
         corner = newCorner
+        fillColor = newFillColor
+        materialAlpha = newMaterialAlpha
         if (changed) applyVendorStyle()
     }
 
@@ -70,7 +81,20 @@ private class ColorOsMaterialLayerView(
 
     private fun applyVendorStyle() {
         val currentRole = role ?: return
-        bridge.applySurface(this, currentRole)
+        alpha = materialAlpha
+        setBackgroundColor(fillColor ?: AndroidColor.TRANSPARENT)
+
+        /*
+         * Ordinary content cards in ColorOS system apps are semantic surfaces,
+         * not top-bar glass. Keep the genuine Oplus SDF corner path but do not
+         * apply TYPE_FRAMEWORK_TOP_BAR_BLUR to every large card. Floating bars
+         * and controls still use their recovered vendor material presets.
+         */
+        if (currentRole == ColorOsSurfaceRole.CARD) {
+            bridge.clear(this)
+        } else {
+            bridge.applySurface(this, currentRole)
+        }
         applyCorner()
     }
 
@@ -125,7 +149,7 @@ private class ColorOsTextButtonView(
         label.text = text
         label.setTextColor(textColor)
         isEnabled = enabled
-        alpha = if (enabled) 1f else 0.42f
+        alpha = if (enabled) 1f else 0.38f
         setOnClickListener(if (enabled) View.OnClickListener { click() } else null)
         if (appliedRole != role || currentEnabled != enabled) {
             appliedRole = role
@@ -161,12 +185,10 @@ private class ColorOsTextButtonView(
 /**
  * A production surface whose visual layer is ColorOS' actual material View.
  * Compose remains responsible for semantics/layout/content while the vendor
- * View provides blur, material stroke and SDF corner rendering underneath.
+ * View provides material rendering and Oplus SDF corners underneath.
  *
- * The vendor View is deliberately matchParentSize rather than fillMaxSize: it
- * must paint the size chosen by Compose content, never participate in measuring
- * the parent. Using fillMaxSize here can make an intrinsically sized floating
- * surface (notably the bottom navigation bar) expand to the whole window.
+ * The vendor View is matchParentSize rather than fillMaxSize: it paints the
+ * size chosen by Compose content and never participates in parent measurement.
  */
 @Composable
 fun ColorOsMaterialSurface(
@@ -187,19 +209,35 @@ fun ColorOsMaterialSurface(
         Surface(
             modifier = modifier,
             shape = composeShape,
-            color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
-            tonalElevation = 1.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f)),
+            tonalElevation = 0.dp,
         ) {
             Column(Modifier.padding(contentPadding), content = content)
         }
         return
     }
 
-    Box(modifier.clip(composeShape)) {
+    val cardFill = MaterialTheme.colorScheme.surfaceContainerLow.toArgb()
+    val floatingBarFill = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.82f).toArgb()
+
+    // Do not Compose-clip the vendor path: OplusMaterialCornerParams owns the
+    // visible edge on ColorOS, preserving its SDF/G2 profile.
+    Box(modifier) {
         AndroidView(
             factory = { ColorOsMaterialLayerView(activeBridge.materialContext, activeBridge) },
-            update = { it.configure(role, corner) },
+            update = { view ->
+                view.configure(
+                    newRole = role,
+                    newCorner = corner,
+                    newFillColor = when (role) {
+                        ColorOsSurfaceRole.CARD -> cardFill
+                        ColorOsSurfaceRole.BOTTOM_BAR -> floatingBarFill
+                        else -> null
+                    },
+                    newMaterialAlpha = if (role == ColorOsSurfaceRole.BOTTOM_BAR) 0.78f else 1f,
+                )
+            },
             modifier = Modifier.matchParentSize(),
         )
         Column(Modifier.padding(contentPadding), content = content)
@@ -218,10 +256,11 @@ fun ColorOsActionButton(
 ) {
     val hostContext = LocalContext.current
     val activeBridge = LocalColorOsUiBridge.current?.takeIf { it.runtimeInfo.available }
-    val textColor = when (role) {
-        ColorOsSurfaceRole.PRIMARY_BUTTON, ColorOsSurfaceRole.CHIP_SELECTED -> MaterialTheme.colorScheme.onPrimary
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+
+    // COUI content presets are translucent materials rather than opaque primary
+    // fills. Foreground text therefore follows host onSurface contrast instead
+    // of assuming an onPrimary background that may not exist.
+    val textColor = MaterialTheme.colorScheme.onSurface
 
     if (activeBridge == null) {
         if (fallbackOutlined) {
