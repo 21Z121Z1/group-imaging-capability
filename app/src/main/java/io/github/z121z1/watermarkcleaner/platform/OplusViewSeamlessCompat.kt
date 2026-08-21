@@ -15,6 +15,11 @@ import java.util.WeakHashMap
  * COUIFloatingButtonSeamlessImpl, which delegates to the framework class
  * com.oplus.animation.OplusViewSeamless. The parameter array and bundle keys
  * intentionally match the system implementation rather than approximating it.
+ *
+ * Note that ColorOS material Views are intentionally constructed with the
+ * foreign UXDesign package Context. That Context cannot resolve our host
+ * Activity, so callers must explicitly provide the host Context when
+ * registering seamless animation.
  */
 object OplusViewSeamlessCompat {
     private const val CLASS_NAME = "com.oplus.animation.OplusViewSeamless"
@@ -34,12 +39,11 @@ object OplusViewSeamlessCompat {
         Class.forName(CALLBACK_NAME)
     }.isSuccess
 
-    fun register(view: View, color: Int = 0): Result<Boolean> = runCatching {
+    fun register(view: View, hostContext: Context, color: Int = 0): Result<Boolean> = runCatching {
         if (view.width <= 0 || !view.isAttachedToWindow) return@runCatching false
         if (registeredWidths[view] == view.width) return@runCatching true
 
-        val activity = findActivity(view.rootView?.context) ?: findActivity(view.context)
-            ?: return@runCatching false
+        val activity = findActivity(hostContext) ?: return@runCatching false
         val seamlessClass = Class.forName(CLASS_NAME)
         val callbackClass = Class.forName(CALLBACK_NAME)
         val callback = Proxy.newProxyInstance(
@@ -78,11 +82,11 @@ object OplusViewSeamlessCompat {
         accepted
     }
 
-    fun registerWhenLaidOut(view: View, color: Int = 0) {
+    fun registerWhenLaidOut(view: View, hostContext: Context, color: Int = 0) {
         if (view.width > 0 && view.isAttachedToWindow) {
-            register(view, color)
+            register(view, hostContext, color)
         } else {
-            view.post { register(view, color) }
+            view.post { register(view, hostContext, color) }
         }
     }
 
