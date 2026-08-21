@@ -3,10 +3,13 @@ package io.github.z121z1.watermarkcleaner
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import io.github.z121z1.watermarkcleaner.platform.ColorOsPredictiveBackDiagnostics
+import io.github.z121z1.watermarkcleaner.platform.OplusViewSeamlessCompat
 import io.github.z121z1.watermarkcleaner.ui.WatermarkCleanerApp
 import io.github.z121z1.watermarkcleaner.ui.WatermarkCleanerTheme
 
@@ -17,6 +20,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         acceptShareIntent(intent)
+
+        if (BuildConfig.DEBUG) {
+            val predictive = ColorOsPredictiveBackDiagnostics.inspect(this)
+            Log.i(
+                "WatermarkCleaner/ColorOS",
+                "predictiveContinuous=${predictive.predictiveContinuousProperty} " +
+                    "thirdPartyPredictive=${predictive.thirdPartyPredictiveBackSetting} " +
+                    "oplusViewSeamless=${OplusViewSeamlessCompat.isAvailable()}",
+            )
+        }
+
         setContent {
             WatermarkCleanerTheme {
                 WatermarkCleanerApp(viewModel = viewModel)

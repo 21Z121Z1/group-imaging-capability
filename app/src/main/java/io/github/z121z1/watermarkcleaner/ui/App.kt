@@ -5,22 +5,16 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.os.Build
 import android.util.Size
-import android.view.View
 import android.widget.ImageView
-import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,18 +30,13 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -55,14 +44,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteItem
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -71,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -79,7 +65,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -95,13 +80,14 @@ import io.github.z121z1.watermarkcleaner.core.HdrProbePattern
 import io.github.z121z1.watermarkcleaner.data.PhotoLibraryAccess
 import io.github.z121z1.watermarkcleaner.data.ScreenshotMediaFinder
 import io.github.z121z1.watermarkcleaner.platform.ColorOsCompat
+import io.github.z121z1.watermarkcleaner.platform.ColorOsSurfaceRole
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private enum class Destination(val label: String, val glyph: String) {
-    PROCESS("处理", "净"),
-    CALIBRATE("校准", "准"),
-    SETTINGS("设置", "设"),
+private enum class Destination(val label: String) {
+    PROCESS("处理"),
+    CALIBRATE("校准"),
+    SETTINGS("设置"),
 }
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
@@ -109,8 +95,8 @@ private enum class Destination(val label: String, val glyph: String) {
 fun WatermarkCleanerApp(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val activity = LocalActivity.current as? ComponentActivity
     var destination by remember { mutableStateOf(Destination.PROCESS) }
+    val calibrationGeometry = rememberCalibrationMorphGeometry()
 
     val pickImages = androidx.activity.compose.rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(50),
@@ -148,43 +134,42 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
         }
     }
 
-    if (state.calibration.active) {
-        CalibrationCaptureScreen(
-            calibration = state.calibration,
-            onScreenshotUri = viewModel::addCalibrationSample,
-            onNeedPicker = viewModel::requestCalibrationPicker,
-            onMessage = viewModel::calibrationMessage,
-            onCancel = viewModel::cancelCalibration,
+    val destinationBack = rememberPredictiveBackHandoff(
+        enabled = !state.calibration.active && destination != Destination.PROCESS,
+        onCommit = { destination = Destination.PROCESS },
+    )
+    val calibrationBack = rememberPredictiveBackHandoff(
+        enabled = state.calibration.active && !state.calibration.fitting && !state.calibration.complete,
+        onCommit = viewModel::cancelCalibration,
+    )
+    val calibrationMorphProgress = rememberCalibrationMorphProgress(
+        open = destination == Destination.CALIBRATE,
+        backProgress = if (destination == Destination.CALIBRATE) destinationBack.progress else 0f,
+        geometry = calibrationGeometry,
+    )
+
+    val safePageModifier = Modifier
+        .fillMaxSize()
+        .padding(bottom = 88.dp)
+        .windowInsetsPadding(
+            WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         )
-        return
+
+    val processModifier = when (destination) {
+        Destination.SETTINGS -> safePageModifier.predictiveBackIncoming(destinationBack.progress)
+        Destination.PROCESS, Destination.CALIBRATE -> safePageModifier
     }
 
-    val adaptiveInfo = currentWindowAdaptiveInfoV2()
-    val navType = NavigationSuiteScaffoldDefaults.navigationSuiteType(adaptiveInfo)
+    val appBaseModifier = if (state.calibration.active) {
+        Modifier.fillMaxSize().predictiveBackIncoming(calibrationBack.progress)
+    } else {
+        Modifier.fillMaxSize()
+    }
 
-    NavigationSuiteScaffold(
-        navigationSuiteType = navType,
-        navigationItems = {
-            Destination.entries.forEach { item ->
-                NavigationSuiteItem(
-                    navigationSuiteType = navType,
-                    icon = { NavGlyph(item.glyph, selected = destination == item) },
-                    label = { Text(item.label) },
-                    selected = destination == item,
-                    onClick = { destination = item },
-                )
-            }
-        },
-    ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(
-                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-                ),
-        ) {
-            when (destination) {
-                Destination.PROCESS -> ProcessScreen(
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Box(appBaseModifier) {
+            Box(processModifier) {
+                ProcessScreen(
                     state = state,
                     onPick = {
                         pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -192,43 +177,84 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
                     onProcess = viewModel::processReady,
                     onRemove = viewModel::remove,
                     onClearFinished = viewModel::clearFinished,
+                    onOpenCalibration = { destination = Destination.CALIBRATE },
+                    calibrationGeometry = calibrationGeometry,
+                    calibrationEntryVisible = destination != Destination.CALIBRATE || !calibrationGeometry.ready,
                 )
-                Destination.CALIBRATE -> CalibrationHomeScreen(
-                    state = state,
-                    mediaAccess = ScreenshotMediaFinder(context).access(),
-                    onRequestFullAccess = {
-                        requestMediaAccess.launch(
-                            arrayOf(
-                                Manifest.permission.READ_MEDIA_IMAGES,
-                                Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
-                            ),
-                        )
-                    },
-                    onStartSdr = { viewModel.startCalibration(false) },
-                    onStartHdr = { viewModel.startCalibration(true) },
-                    onReset = viewModel::resetModels,
+            }
+
+            if (destination == Destination.SETTINGS) {
+                Box(safePageModifier.predictiveBackOutgoing(destinationBack.progress)) {
+                    SettingsScreen(
+                        state = state,
+                        onChooseOutput = { chooseOutput.launch(null) },
+                        onDefaultOutput = { viewModel.setOutputTree(null) },
+                        onQuality = viewModel::setJpegQuality,
+                        onCleanHdr = viewModel::setCleanHdrGainMap,
+                    )
+                }
+            }
+
+            if (destination == Destination.CALIBRATE) {
+                Box(safePageModifier) {
+                    CalibrationHomeScreen(
+                        state = state,
+                        mediaAccess = ScreenshotMediaFinder(context).access(),
+                        onRequestFullAccess = {
+                            requestMediaAccess.launch(
+                                arrayOf(
+                                    Manifest.permission.READ_MEDIA_IMAGES,
+                                    Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+                                ),
+                            )
+                        },
+                        onStartSdr = { viewModel.startCalibration(false) },
+                        onStartHdr = { viewModel.startCalibration(true) },
+                        onReset = viewModel::resetModels,
+                        geometry = calibrationGeometry,
+                        contentProgress = calibrationMorphProgress,
+                    )
+                }
+            }
+
+            if (destination != Destination.CALIBRATE) {
+                val primaryDestinations = listOf(Destination.PROCESS, Destination.SETTINGS)
+                val selectedPrimaryIndex = if (destination == Destination.SETTINGS) 1 else 0
+                ColorOsNavigationDock(
+                    labels = primaryDestinations.map { it.label },
+                    selectedIndex = selectedPrimaryIndex,
+                    onSelect = { destination = primaryDestinations[it] },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                        .padding(vertical = 10.dp)
+                        .fillMaxWidth(0.90f)
+                        .widthIn(max = 380.dp),
                 )
-                Destination.SETTINGS -> SettingsScreen(
-                    state = state,
-                    onChooseOutput = { chooseOutput.launch(null) },
-                    onDefaultOutput = { viewModel.setOutputTree(null) },
-                    onQuality = viewModel::setJpegQuality,
-                    onCleanHdr = viewModel::setCleanHdrGainMap,
+            }
+
+            if (destination == Destination.CALIBRATE && calibrationGeometry.ready) {
+                CalibrationSharedHero(
+                    modelReady = state.modelReady,
+                    geometry = calibrationGeometry,
+                    progress = calibrationMorphProgress,
                 )
             }
         }
-    }
-}
 
-@Composable
-private fun NavGlyph(text: String, selected: Boolean) {
-    Surface(
-        modifier = Modifier.size(32.dp),
-        shape = CircleShape,
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        if (state.calibration.active) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .predictiveBackOutgoing(calibrationBack.progress),
+            ) {
+                CalibrationCaptureScreen(
+                    calibration = state.calibration,
+                    onScreenshotUri = viewModel::addCalibrationSample,
+                    onNeedPicker = viewModel::requestCalibrationPicker,
+                    onMessage = viewModel::calibrationMessage,
+                )
+            }
         }
     }
 }
@@ -241,13 +267,19 @@ private fun ProcessScreen(
     onProcess: () -> Unit,
     onRemove: (android.net.Uri) -> Unit,
     onClearFinished: () -> Unit,
+    onOpenCalibration: () -> Unit,
+    calibrationGeometry: CalibrationMorphGeometry,
+    calibrationEntryVisible: Boolean,
 ) {
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
     val directive = calculatePaneScaffoldDirective(adaptiveInfo)
     val twoPane = directive.maxHorizontalPartitions >= 2
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         PageHeader(
@@ -255,14 +287,38 @@ private fun ProcessScreen(
             subtitle = if (state.modelReady) "模型已就绪 · 本地处理 · 支持 Ultra HDR" else "先完成一次校准，再处理截图",
         )
 
+        CalibrationEntryCard(
+            modelReady = state.modelReady,
+            visible = calibrationEntryVisible,
+            geometry = calibrationGeometry,
+            onClick = onOpenCalibration,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onPick) { Text("选择图片") }
-            Button(
+            ColorOsActionButton(
+                text = "选择图片",
+                onClick = onPick,
+                role = ColorOsSurfaceRole.SECONDARY_BUTTON,
+                modifier = Modifier.height(48.dp).widthIn(min = 92.dp),
+            )
+            ColorOsActionButton(
+                text = "开始处理",
                 onClick = onProcess,
-                enabled = state.modelReady && state.queue.any { it.status == QueueStatus.READY || it.status == QueueStatus.ERROR },
-            ) { Text("开始处理") }
+                enabled = state.modelReady && state.queue.any {
+                    it.status == QueueStatus.READY || it.status == QueueStatus.ERROR
+                },
+                role = ColorOsSurfaceRole.PRIMARY_BUTTON,
+                modifier = Modifier.height(48.dp).widthIn(min = 104.dp),
+            )
             if (state.queue.any { it.status == QueueStatus.DONE }) {
-                OutlinedButton(onClick = onClearFinished) { Text("清除已完成") }
+                ColorOsActionButton(
+                    text = "清除已完成",
+                    onClick = onClearFinished,
+                    role = ColorOsSurfaceRole.TRANSPARENT_BUTTON,
+                    fallbackOutlined = true,
+                    modifier = Modifier.height(48.dp).widthIn(min = 104.dp),
+                )
             }
         }
 
@@ -354,10 +410,18 @@ private fun QueueCard(item: QueueItem, onRemove: (android.net.Uri) -> Unit) {
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                if (item.hdr) Text("HDR", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                if (item.hdr) {
+                    Text("HDR", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
             }
             if (item.status != QueueStatus.PROCESSING) {
-                OutlinedButton(onClick = { onRemove(item.uri) }) { Text("移除") }
+                ColorOsActionButton(
+                    text = "移除",
+                    onClick = { onRemove(item.uri) },
+                    role = ColorOsSurfaceRole.TRANSPARENT_BUTTON,
+                    fallbackOutlined = true,
+                    modifier = Modifier.height(42.dp).widthIn(min = 72.dp),
+                )
             }
         }
     }
@@ -396,12 +460,22 @@ private fun CalibrationHomeScreen(
     onStartSdr: () -> Unit,
     onStartHdr: () -> Unit,
     onReset: () -> Unit,
+    geometry: CalibrationMorphGeometry,
+    contentProgress: Float,
 ) {
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val p = contentProgress.coerceIn(0f, 1f)
+                alpha = p
+                translationX = size.width * 0.025f * (1f - p)
+            }
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { PageHeader("校准", "像刚才一样，让已知灰阶经过系统截图链路，再拟合 Y = aX + b") }
+        item { CalibrationTargetPlaceholder(geometry = geometry) }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("截图接收", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -416,7 +490,12 @@ private fun CalibrationHomeScreen(
                 )
                 if (mediaAccess != PhotoLibraryAccess.FULL) {
                     Spacer(Modifier.height(10.dp))
-                    OutlinedButton(onClick = onRequestFullAccess) { Text("授权自动读取截图") }
+                    ColorOsActionButton(
+                        text = "授权自动读取截图",
+                        onClick = onRequestFullAccess,
+                        role = ColorOsSurfaceRole.SECONDARY_BUTTON,
+                        modifier = Modifier.height(48.dp).widthIn(min = 152.dp),
+                    )
                 }
             }
         }
@@ -425,7 +504,12 @@ private fun CalibrationHomeScreen(
                 Text("SDR 六灰阶", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("0 / 32 / 64 / 128 / 192 / 255，按系统截图顺序自动收集。")
                 Spacer(Modifier.height(10.dp))
-                Button(onClick = onStartSdr) { Text("开始 SDR 校准") }
+                ColorOsActionButton(
+                    text = "开始 SDR 校准",
+                    onClick = onStartSdr,
+                    role = ColorOsSurfaceRole.PRIMARY_BUTTON,
+                    modifier = Modifier.height(48.dp).widthIn(min = 136.dp),
+                )
             }
         }
         item {
@@ -436,15 +520,26 @@ private fun CalibrationHomeScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(10.dp))
-                Button(onClick = onStartHdr) { Text("激活 HDR 并校准") }
+                ColorOsActionButton(
+                    text = "激活 HDR 并校准",
+                    onClick = onStartHdr,
+                    role = ColorOsSurfaceRole.PRIMARY_BUTTON,
+                    modifier = Modifier.height(48.dp).widthIn(min = 152.dp),
+                )
             }
         }
-        if (state.calibration.message != null) {
-            item { GlassCard(Modifier.fillMaxWidth()) { Text(state.calibration.message) } }
+        state.calibration.message?.let { message ->
+            item { GlassCard(Modifier.fillMaxWidth()) { Text(message) } }
         }
         if (state.modelReady) {
             item {
-                OutlinedButton(onClick = onReset) { Text("删除当前模型") }
+                ColorOsActionButton(
+                    text = "删除当前模型",
+                    onClick = onReset,
+                    role = ColorOsSurfaceRole.TRANSPARENT_BUTTON,
+                    fallbackOutlined = true,
+                    modifier = Modifier.height(48.dp).widthIn(min = 128.dp),
+                )
             }
         }
         item { Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp)) }
@@ -461,11 +556,15 @@ private fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val capabilities = remember { ColorOsCompat.detect(context) }
+    val colorOs = LocalColorOsUiBridge.current
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { PageHeader("设置", "导出、HDR 与平台适配") }
+        item { PageHeader("设置", "导出、HDR 与 ColorOS 17 系统 UI") }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("输出位置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -477,8 +576,19 @@ private fun SettingsScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onChooseOutput) { Text("选择目录") }
-                    OutlinedButton(onClick = onDefaultOutput) { Text("恢复默认") }
+                    ColorOsActionButton(
+                        text = "选择目录",
+                        onClick = onChooseOutput,
+                        role = ColorOsSurfaceRole.PRIMARY_BUTTON,
+                        modifier = Modifier.height(46.dp).widthIn(min = 92.dp),
+                    )
+                    ColorOsActionButton(
+                        text = "恢复默认",
+                        onClick = onDefaultOutput,
+                        role = ColorOsSurfaceRole.TRANSPARENT_BUTTON,
+                        fallbackOutlined = true,
+                        modifier = Modifier.height(46.dp).widthIn(min = 92.dp),
+                    )
                 }
             }
         }
@@ -501,7 +611,10 @@ private fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("清理 HDR gain map", fontWeight = FontWeight.SemiBold)
-                        Text("优先使用 gain profile；否则仅在已知水印掩膜内做确定性局部中值清理。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "优先使用 gain profile；否则仅在已知水印掩膜内做确定性局部中值清理。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     Switch(checked = state.cleanHdrGainMap, onCheckedChange = onCleanHdr)
                 }
@@ -509,16 +622,23 @@ private fun SettingsScreen(
         }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("ColorOS / 自由窗口", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("ColorOS 17 原生界面能力", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                val runtime = colorOs?.runtimeInfo
                 Text(
-                    if (capabilities.colorOsFamily) "检测到 OPPO / OnePlus / realme 系平台。应用保持 resizeable，并让系统自由窗负责窗口级圆角、阴影与手势。"
-                    else "使用标准 Android 自适应窗口路径。",
+                    if (runtime?.available == true) {
+                        "已加载 UXDesign ${runtime.installedVersion}。内容卡使用 OplusMaterialCornerParams SDF；浮动栏与按钮使用真实 COUI material preset；底栏切换使用 ToolbarGroupTransitionController。"
+                    } else if (capabilities.colorOsFamily) {
+                        "检测到 ColorOS 系设备，但 UXDesign runtime 当前不可调用；界面自动退回 Android Dynamic Color + Material 3。"
+                    } else {
+                        "非 ColorOS 环境：使用标准 Android 17 自适应 UI。"
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "跨窗口模糊：${if (capabilities.crossWindowBlur) "系统支持" else "当前不可用"}。不通过反射调用 ColorOS 签名级私有材质 API，避免 OTA 后失效和隐藏 API 限制。",
+                    "系统强调色=${if (runtime?.paletteAvailable == true) "COUI controls" else "Dynamic Color"} · SDF=${runtime?.smoothCornerAvailable == true} · 无缝 group transition=${runtime?.transitionAvailable == true} · 跨窗口模糊=${capabilities.crossWindowBlur}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
@@ -532,7 +652,6 @@ private fun CalibrationCaptureScreen(
     onScreenshotUri: (android.net.Uri) -> Unit,
     onNeedPicker: () -> Unit,
     onMessage: (String) -> Unit,
-    onCancel: () -> Unit,
 ) {
     val context = LocalContext.current
     val activity = LocalActivity.current as? Activity
@@ -603,9 +722,6 @@ private fun CalibrationCaptureScreen(
     } else {
         Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(level, level, level)))
     }
-
-    // Hardware/system screenshot gesture is the intended control. Long-press/back is not placed on
-    // the calibration frame because any visible control would contaminate the fit.
 }
 
 @Composable
@@ -630,7 +746,8 @@ private fun HdrFlatCalibrationFrame(level: Int) {
         }
     }
     Box(
-        Modifier.fillMaxSize().onSizeChanged { size = it }.background(androidx.compose.ui.graphics.Color(level, level, level)),
+        Modifier.fillMaxSize().onSizeChanged { size = it }
+            .background(androidx.compose.ui.graphics.Color(level, level, level)),
     ) {
         val current = bitmap
         if (current != null) {
@@ -653,13 +770,10 @@ private fun PageHeader(title: String, subtitle: String) {
 
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column.() -> Unit) {
-    Surface(
+    ColorOsMaterialSurface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
-        tonalElevation = 1.dp,
-    ) {
-        Column(Modifier.padding(18.dp), content = content)
-    }
+        role = ColorOsSurfaceRole.CARD,
+        corner = ColorOsCornerProfile.LARGE,
+        content = content,
+    )
 }
