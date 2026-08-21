@@ -65,7 +65,7 @@ fun ColorOsNavigationDock(
                     } else {
                         ColorOsSurfaceRole.TRANSPARENT_BUTTON
                     },
-                    fallbackOutlined = false,
+                    fallbackOutlined = !selected,
                     modifier = Modifier.weight(1f).height(FloatingBarItemHeight),
                     onNativeView = { nativeViews[index] = it },
                 )
