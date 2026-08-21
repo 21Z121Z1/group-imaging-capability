@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <queries>
+        <package android:name="com.coloros.gallery3d" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
-        android:label="Predictive Back Lab"
+        android:label="ColorOS OEM Animation Lab"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
