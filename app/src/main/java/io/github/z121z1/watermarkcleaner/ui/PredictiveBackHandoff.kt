@@ -100,5 +100,8 @@ fun Modifier.predictiveBackIncoming(progress: Float): Modifier = graphicsLayer {
     scaleX = 0.965f + 0.035f * p
     scaleY = 0.965f + 0.035f * p
     translationX = -size.width * 0.018f * (1f - p)
-    alpha = 0.45f + 0.55f * p
+    // Keep the destination composed but completely hidden until the gesture
+    // actually begins. Transparent Compose pages must not leak the target at
+    // rest; it is revealed solely by BackEvent progress.
+    alpha = p
 }
