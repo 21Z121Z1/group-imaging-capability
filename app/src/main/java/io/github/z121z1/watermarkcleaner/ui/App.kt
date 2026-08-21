@@ -56,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -95,6 +96,7 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var destination by remember { mutableStateOf(Destination.PROCESS) }
+    val calibrationGeometry = rememberCalibrationMorphGeometry()
 
     val pickImages = androidx.activity.compose.rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(50),
@@ -132,9 +134,6 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
         }
     }
 
-    // Internal pages use an app-level predictive -> continuous handoff. The
-    // PROCESS root deliberately installs no handler, preserving ColorOS Shell's
-    // own cross-activity/task predictive-continuous path back to Launcher.
     val destinationBack = rememberPredictiveBackHandoff(
         enabled = !state.calibration.active && destination != Destination.PROCESS,
         onCommit = { destination = Destination.PROCESS },
@@ -142,6 +141,11 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
     val calibrationBack = rememberPredictiveBackHandoff(
         enabled = state.calibration.active && !state.calibration.fitting && !state.calibration.complete,
         onCommit = viewModel::cancelCalibration,
+    )
+    val calibrationMorphProgress = rememberCalibrationMorphProgress(
+        open = destination == Destination.CALIBRATE,
+        backProgress = if (destination == Destination.CALIBRATE) destinationBack.progress else 0f,
+        geometry = calibrationGeometry,
     )
 
     val safePageModifier = Modifier
@@ -151,13 +155,9 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
             WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         )
 
-    // Keep PROCESS alive behind secondary destinations. This preserves list
-    // state and gives predictive back a real target surface to reveal rather
-    // than swapping content only after the gesture finishes.
-    val processModifier = if (destination != Destination.PROCESS) {
-        safePageModifier.predictiveBackIncoming(destinationBack.progress)
-    } else {
-        safePageModifier
+    val processModifier = when (destination) {
+        Destination.SETTINGS -> safePageModifier.predictiveBackIncoming(destinationBack.progress)
+        Destination.PROCESS, Destination.CALIBRATE -> safePageModifier
     }
 
     val appBaseModifier = if (state.calibration.active) {
@@ -177,55 +177,71 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
                     onProcess = viewModel::processReady,
                     onRemove = viewModel::remove,
                     onClearFinished = viewModel::clearFinished,
+                    onOpenCalibration = { destination = Destination.CALIBRATE },
+                    calibrationGeometry = calibrationGeometry,
+                    calibrationEntryVisible = destination != Destination.CALIBRATE || !calibrationGeometry.ready,
                 )
             }
 
-            if (destination != Destination.PROCESS) {
+            if (destination == Destination.SETTINGS) {
                 Box(safePageModifier.predictiveBackOutgoing(destinationBack.progress)) {
-                    when (destination) {
-                        Destination.CALIBRATE -> CalibrationHomeScreen(
-                            state = state,
-                            mediaAccess = ScreenshotMediaFinder(context).access(),
-                            onRequestFullAccess = {
-                                requestMediaAccess.launch(
-                                    arrayOf(
-                                        Manifest.permission.READ_MEDIA_IMAGES,
-                                        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
-                                    ),
-                                )
-                            },
-                            onStartSdr = { viewModel.startCalibration(false) },
-                            onStartHdr = { viewModel.startCalibration(true) },
-                            onReset = viewModel::resetModels,
-                        )
-                        Destination.SETTINGS -> SettingsScreen(
-                            state = state,
-                            onChooseOutput = { chooseOutput.launch(null) },
-                            onDefaultOutput = { viewModel.setOutputTree(null) },
-                            onQuality = viewModel::setJpegQuality,
-                            onCleanHdr = viewModel::setCleanHdrGainMap,
-                        )
-                        Destination.PROCESS -> Unit
-                    }
+                    SettingsScreen(
+                        state = state,
+                        onChooseOutput = { chooseOutput.launch(null) },
+                        onDefaultOutput = { viewModel.setOutputTree(null) },
+                        onQuality = viewModel::setJpegQuality,
+                        onCleanHdr = viewModel::setCleanHdrGainMap,
+                    )
                 }
             }
 
-            ColorOsNavigationDock(
-                labels = Destination.entries.map { it.label },
-                selectedIndex = destination.ordinal,
-                onSelect = { destination = Destination.entries[it] },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .fillMaxWidth()
-                    .widthIn(max = 480.dp),
-            )
+            if (destination == Destination.CALIBRATE) {
+                Box(safePageModifier) {
+                    CalibrationHomeScreen(
+                        state = state,
+                        mediaAccess = ScreenshotMediaFinder(context).access(),
+                        onRequestFullAccess = {
+                            requestMediaAccess.launch(
+                                arrayOf(
+                                    Manifest.permission.READ_MEDIA_IMAGES,
+                                    Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+                                ),
+                            )
+                        },
+                        onStartSdr = { viewModel.startCalibration(false) },
+                        onStartHdr = { viewModel.startCalibration(true) },
+                        onReset = viewModel::resetModels,
+                        geometry = calibrationGeometry,
+                        contentProgress = calibrationMorphProgress,
+                    )
+                }
+            }
+
+            if (destination != Destination.CALIBRATE) {
+                val primaryDestinations = listOf(Destination.PROCESS, Destination.SETTINGS)
+                val selectedPrimaryIndex = if (destination == Destination.SETTINGS) 1 else 0
+                ColorOsNavigationDock(
+                    labels = primaryDestinations.map { it.label },
+                    selectedIndex = selectedPrimaryIndex,
+                    onSelect = { destination = primaryDestinations[it] },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .fillMaxWidth()
+                        .widthIn(max = 480.dp),
+                )
+            }
+
+            if (destination == Destination.CALIBRATE && calibrationGeometry.ready) {
+                CalibrationSharedHero(
+                    modelReady = state.modelReady,
+                    geometry = calibrationGeometry,
+                    progress = calibrationMorphProgress,
+                )
+            }
         }
 
-        // Calibration is a true full-screen surface, but the app below remains
-        // composed. A back gesture reveals that live target; commit finishes
-        // from the exact gesture state and only then cancels calibration.
         if (state.calibration.active) {
             Box(
                 Modifier
@@ -251,6 +267,9 @@ private fun ProcessScreen(
     onProcess: () -> Unit,
     onRemove: (android.net.Uri) -> Unit,
     onClearFinished: () -> Unit,
+    onOpenCalibration: () -> Unit,
+    calibrationGeometry: CalibrationMorphGeometry,
+    calibrationEntryVisible: Boolean,
 ) {
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
     val directive = calculatePaneScaffoldDirective(adaptiveInfo)
@@ -263,6 +282,14 @@ private fun ProcessScreen(
         PageHeader(
             title = "截图去水印",
             subtitle = if (state.modelReady) "模型已就绪 · 本地处理 · 支持 Ultra HDR" else "先完成一次校准，再处理截图",
+        )
+
+        CalibrationEntryCard(
+            modelReady = state.modelReady,
+            visible = calibrationEntryVisible,
+            geometry = calibrationGeometry,
+            onClick = onOpenCalibration,
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -430,12 +457,21 @@ private fun CalibrationHomeScreen(
     onStartSdr: () -> Unit,
     onStartHdr: () -> Unit,
     onReset: () -> Unit,
+    geometry: CalibrationMorphGeometry,
+    contentProgress: Float,
 ) {
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .graphicsLayer {
+                val p = contentProgress.coerceIn(0f, 1f)
+                alpha = p
+                translationX = size.width * 0.025f * (1f - p)
+            },
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { PageHeader("校准", "让已知灰阶经过系统截图链路，再拟合 Y = aX + b") }
+        item { CalibrationTargetPlaceholder(geometry = geometry) }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("截图接收", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
