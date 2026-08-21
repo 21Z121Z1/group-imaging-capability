@@ -150,7 +150,7 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
 
     val safePageModifier = Modifier
         .fillMaxSize()
-        .padding(bottom = 74.dp)
+        .padding(bottom = 88.dp)
         .windowInsetsPadding(
             WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         )
@@ -166,7 +166,7 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
         Modifier.fillMaxSize()
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Box(appBaseModifier) {
             Box(processModifier) {
                 ProcessScreen(
@@ -227,9 +227,9 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .fillMaxWidth()
-                        .widthIn(max = 480.dp),
+                        .padding(vertical = 10.dp)
+                        .fillMaxWidth(0.90f)
+                        .widthIn(max = 380.dp),
                 )
             }
 
@@ -276,7 +276,10 @@ private fun ProcessScreen(
     val twoPane = directive.maxHorizontalPartitions >= 2
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         PageHeader(
@@ -463,12 +466,13 @@ private fun CalibrationHomeScreen(
     LazyColumn(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
             .graphicsLayer {
                 val p = contentProgress.coerceIn(0f, 1f)
                 alpha = p
                 translationX = size.width * 0.025f * (1f - p)
-            },
+            }
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { CalibrationTargetPlaceholder(geometry = geometry) }
@@ -554,7 +558,10 @@ private fun SettingsScreen(
     val capabilities = remember { ColorOsCompat.detect(context) }
     val colorOs = LocalColorOsUiBridge.current
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item { PageHeader("设置", "导出、HDR 与 ColorOS 17 系统 UI") }
@@ -619,7 +626,7 @@ private fun SettingsScreen(
                 val runtime = colorOs?.runtimeInfo
                 Text(
                     if (runtime?.available == true) {
-                        "已加载 UXDesign ${runtime.installedVersion}。卡片使用真实 Blur + OplusMaterialCornerParams SDF；按钮使用 COUI Content preset；底栏切换使用 ToolbarGroupTransitionController。"
+                        "已加载 UXDesign ${runtime.installedVersion}。内容卡使用 OplusMaterialCornerParams SDF；浮动栏与按钮使用真实 COUI material preset；底栏切换使用 ToolbarGroupTransitionController。"
                     } else if (capabilities.colorOsFamily) {
                         "检测到 ColorOS 系设备，但 UXDesign runtime 当前不可调用；界面自动退回 Android Dynamic Color + Material 3。"
                     } else {
@@ -629,7 +636,7 @@ private fun SettingsScreen(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "系统配色=${if (runtime?.paletteAvailable == true) "COUI resource roles" else "Dynamic Color"} · SDF=${runtime?.smoothCornerAvailable == true} · 无缝 group transition=${runtime?.transitionAvailable == true} · 跨窗口模糊=${capabilities.crossWindowBlur}",
+                    "系统强调色=${if (runtime?.paletteAvailable == true) "COUI controls" else "Dynamic Color"} · SDF=${runtime?.smoothCornerAvailable == true} · 无缝 group transition=${runtime?.transitionAvailable == true} · 跨窗口模糊=${capabilities.crossWindowBlur}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
