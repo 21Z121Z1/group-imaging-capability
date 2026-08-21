@@ -43,25 +43,27 @@ fun WatermarkCleanerTheme(content: @Composable () -> Unit) {
         if (colorOs.runtimeInfo.available) colorOs.palette() else null
     }
 
+    /*
+     * UXDesign's package-local surface/label colors are authored for COUI's own
+     * themed Context. Reading every role through a foreign package Context can
+     * produce a dark surface with a light-theme host (or the inverse). That is
+     * visually invalid even though the resource lookup technically succeeds.
+     *
+     * Keep Android's host semantic colors for background/surface/text contrast,
+     * and import only the ColorOS control accent + divider roles. Vendor Views
+     * still render the real ColorOS material; Compose remains responsible for
+     * accessible foreground/background semantics.
+     */
     val colorScheme = vendorPalette?.let { palette ->
         base.copy(
             primary = Color(palette.primary),
-            onPrimary = Color(palette.onPrimary),
-            background = Color(palette.background),
-            onBackground = Color(palette.labelPrimary),
-            surface = Color(palette.surface),
-            onSurface = Color(palette.labelPrimary),
-            surfaceContainer = Color(palette.card),
-            surfaceContainerLow = Color(palette.background),
-            surfaceContainerHigh = Color(palette.card),
-            onSurfaceVariant = Color(palette.labelSecondary),
             outline = Color(palette.divider),
             outlineVariant = Color(palette.divider),
         )
     } ?: base
 
-    // Compose uses these radii for clipping/layout. On ColorOS the visible edge is
-    // additionally replaced by OplusMaterialCornerParams' SDF/G2 profile.
+    // Compose uses these radii for fallback layout. On ColorOS the visible edge
+    // is additionally produced by OplusMaterialCornerParams' SDF/G2 profile.
     val shapes = Shapes(
         medium = RoundedCornerShape(18.dp),
         large = RoundedCornerShape(24.dp),
