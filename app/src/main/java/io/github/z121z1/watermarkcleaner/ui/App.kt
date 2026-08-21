@@ -8,10 +8,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.util.Size
 import android.widget.ImageView
-import androidx.activity.BackEventCompat
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -51,7 +48,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -60,7 +56,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -85,9 +80,7 @@ import io.github.z121z1.watermarkcleaner.data.PhotoLibraryAccess
 import io.github.z121z1.watermarkcleaner.data.ScreenshotMediaFinder
 import io.github.z121z1.watermarkcleaner.platform.ColorOsCompat
 import io.github.z121z1.watermarkcleaner.platform.ColorOsSurfaceRole
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
 private enum class Destination(val label: String) {
@@ -102,7 +95,6 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var destination by remember { mutableStateOf(Destination.PROCESS) }
-    var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
 
     val pickImages = androidx.activity.compose.rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(50),
@@ -140,46 +132,44 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
         }
     }
 
-    if (state.calibration.active) {
-        CalibrationCaptureScreen(
-            calibration = state.calibration,
-            onScreenshotUri = viewModel::addCalibrationSample,
-            onNeedPicker = viewModel::requestCalibrationPicker,
-            onMessage = viewModel::calibrationMessage,
-            onCancel = viewModel::cancelCalibration,
+    // Internal pages use an app-level predictive -> continuous handoff. The
+    // PROCESS root deliberately installs no handler, preserving ColorOS Shell's
+    // own cross-activity/task predictive-continuous path back to Launcher.
+    val destinationBack = rememberPredictiveBackHandoff(
+        enabled = !state.calibration.active && destination != Destination.PROCESS,
+        onCommit = { destination = Destination.PROCESS },
+    )
+    val calibrationBack = rememberPredictiveBackHandoff(
+        enabled = state.calibration.active && !state.calibration.fitting && !state.calibration.complete,
+        onCommit = viewModel::cancelCalibration,
+    )
+
+    val safePageModifier = Modifier
+        .fillMaxSize()
+        .padding(bottom = 74.dp)
+        .windowInsetsPadding(
+            WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         )
-        return
+
+    // Keep PROCESS alive behind secondary destinations. This preserves list
+    // state and gives predictive back a real target surface to reveal rather
+    // than swapping content only after the gesture finishes.
+    val processModifier = if (destination != Destination.PROCESS) {
+        safePageModifier.predictiveBackIncoming(destinationBack.progress)
+    } else {
+        safePageModifier
     }
 
-    PredictiveBackHandler(enabled = destination != Destination.PROCESS) { progress: Flow<BackEventCompat> ->
-        try {
-            progress.collect { event -> predictiveBackProgress = event.progress }
-            destination = Destination.PROCESS
-        } catch (cancelled: CancellationException) {
-            predictiveBackProgress = 0f
-            throw cancelled
-        } finally {
-            predictiveBackProgress = 0f
-        }
+    val appBaseModifier = if (state.calibration.active) {
+        Modifier.fillMaxSize().predictiveBackIncoming(calibrationBack.progress)
+    } else {
+        Modifier.fillMaxSize()
     }
 
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(bottom = 74.dp)
-                .windowInsetsPadding(
-                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-                )
-                .graphicsLayer {
-                    val p = predictiveBackProgress.coerceIn(0f, 1f)
-                    scaleX = 1f - 0.035f * p
-                    scaleY = 1f - 0.035f * p
-                    alpha = 1f - 0.10f * p
-                },
-        ) {
-            when (destination) {
-                Destination.PROCESS -> ProcessScreen(
+        Box(appBaseModifier) {
+            Box(processModifier) {
+                ProcessScreen(
                     state = state,
                     onPick = {
                         pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -188,42 +178,68 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
                     onRemove = viewModel::remove,
                     onClearFinished = viewModel::clearFinished,
                 )
-                Destination.CALIBRATE -> CalibrationHomeScreen(
-                    state = state,
-                    mediaAccess = ScreenshotMediaFinder(context).access(),
-                    onRequestFullAccess = {
-                        requestMediaAccess.launch(
-                            arrayOf(
-                                Manifest.permission.READ_MEDIA_IMAGES,
-                                Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
-                            ),
+            }
+
+            if (destination != Destination.PROCESS) {
+                Box(safePageModifier.predictiveBackOutgoing(destinationBack.progress)) {
+                    when (destination) {
+                        Destination.CALIBRATE -> CalibrationHomeScreen(
+                            state = state,
+                            mediaAccess = ScreenshotMediaFinder(context).access(),
+                            onRequestFullAccess = {
+                                requestMediaAccess.launch(
+                                    arrayOf(
+                                        Manifest.permission.READ_MEDIA_IMAGES,
+                                        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+                                    ),
+                                )
+                            },
+                            onStartSdr = { viewModel.startCalibration(false) },
+                            onStartHdr = { viewModel.startCalibration(true) },
+                            onReset = viewModel::resetModels,
                         )
-                    },
-                    onStartSdr = { viewModel.startCalibration(false) },
-                    onStartHdr = { viewModel.startCalibration(true) },
-                    onReset = viewModel::resetModels,
-                )
-                Destination.SETTINGS -> SettingsScreen(
-                    state = state,
-                    onChooseOutput = { chooseOutput.launch(null) },
-                    onDefaultOutput = { viewModel.setOutputTree(null) },
-                    onQuality = viewModel::setJpegQuality,
-                    onCleanHdr = viewModel::setCleanHdrGainMap,
+                        Destination.SETTINGS -> SettingsScreen(
+                            state = state,
+                            onChooseOutput = { chooseOutput.launch(null) },
+                            onDefaultOutput = { viewModel.setOutputTree(null) },
+                            onQuality = viewModel::setJpegQuality,
+                            onCleanHdr = viewModel::setCleanHdrGainMap,
+                        )
+                        Destination.PROCESS -> Unit
+                    }
+                }
+            }
+
+            ColorOsNavigationDock(
+                labels = Destination.entries.map { it.label },
+                selectedIndex = destination.ordinal,
+                onSelect = { destination = Destination.entries[it] },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .fillMaxWidth()
+                    .widthIn(max = 480.dp),
+            )
+        }
+
+        // Calibration is a true full-screen surface, but the app below remains
+        // composed. A back gesture reveals that live target; commit finishes
+        // from the exact gesture state and only then cancels calibration.
+        if (state.calibration.active) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .predictiveBackOutgoing(calibrationBack.progress),
+            ) {
+                CalibrationCaptureScreen(
+                    calibration = state.calibration,
+                    onScreenshotUri = viewModel::addCalibrationSample,
+                    onNeedPicker = viewModel::requestCalibrationPicker,
+                    onMessage = viewModel::calibrationMessage,
                 )
             }
         }
-
-        ColorOsNavigationDock(
-            labels = Destination.entries.map { it.label },
-            selectedIndex = destination.ordinal,
-            onSelect = { destination = Destination.entries[it] },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .fillMaxWidth()
-                .widthIn(max = 480.dp),
-        )
     }
 }
 
@@ -593,7 +609,6 @@ private fun CalibrationCaptureScreen(
     onScreenshotUri: (android.net.Uri) -> Unit,
     onNeedPicker: () -> Unit,
     onMessage: (String) -> Unit,
-    onCancel: () -> Unit,
 ) {
     val context = LocalContext.current
     val activity = LocalActivity.current as? Activity
@@ -601,15 +616,6 @@ private fun CalibrationCaptureScreen(
     val scope = rememberCoroutineScope()
     val level = CalibrationEngine.LEVELS[calibration.levelIndex]
     var captureBusy by remember(calibration.samples.size) { mutableStateOf(false) }
-
-    PredictiveBackHandler(enabled = !calibration.fitting && !calibration.complete) { progress: Flow<BackEventCompat> ->
-        try {
-            progress.collect { }
-            onCancel()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        }
-    }
 
     if (calibration.fitting || calibration.complete) {
         LaunchedEffect(Unit) {
