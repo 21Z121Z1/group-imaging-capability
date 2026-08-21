@@ -17,13 +17,23 @@ class AppSmokeTest {
     @Test
     fun launchesProcessHome() {
         rule.onNodeWithText("截图去水印").assertIsDisplayed()
+        rule.onNodeWithText("校准").assertIsDisplayed()
         rule.onNodeWithText("选择图片").assertIsDisplayed()
     }
 
     @Test
-    fun navigatesToCalibrationAndSettings() {
+    fun calibrationIsSecondaryAndSettingsRemainsPrimary() {
         rule.onNodeWithText("校准").performClick()
         rule.onNodeWithText("SDR 六灰阶").assertIsDisplayed()
+
+        rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.waitUntil(timeoutMillis = 4_000) {
+            runCatching {
+                rule.onNodeWithText("截图去水印").assertIsDisplayed()
+                true
+            }.getOrDefault(false)
+        }
+
         rule.onNodeWithText("设置").performClick()
         rule.onNodeWithText("输出位置").assertIsDisplayed()
     }
