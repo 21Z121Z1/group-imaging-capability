@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "GroupImagingCapability"
 include(":app")
 include(":material-playground")
+include(":oplus-private-api-probe")
