@@ -1,0 +1,47 @@
+name: Oplus private API probe
+
+on:
+  push:
+    branches:
+      - experiment/oplus-private-api-probe
+  pull_request:
+    branches:
+      - feature/coloros-material-playground
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android 17 / API 37 platform
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+      - name: Lint and assemble probe
+        run: gradle --stacktrace --console=plain :oplus-private-api-probe:lintDebug :oplus-private-api-probe:assembleDebug
+      - name: Verify APK structure
+        run: |
+          APK="oplus-private-api-probe/build/outputs/apk/debug/oplus-private-api-probe-debug.apk"
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt2" dump badging "$APK" | tee oplus-private-api-probe/build/apk-badging.txt
+          sha256sum "$APK" | tee oplus-private-api-probe/build/apk-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oplus-private-api-probe-debug-apk
+          if-no-files-found: error
+          path: |
+            oplus-private-api-probe/build/outputs/apk/debug/oplus-private-api-probe-debug.apk
+            oplus-private-api-probe/build/apk-badging.txt
+            oplus-private-api-probe/build/apk-sha256.txt
+            oplus-private-api-probe/build/reports/lint-results-debug.*
