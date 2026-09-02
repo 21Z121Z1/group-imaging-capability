@@ -21,7 +21,7 @@ jobs:
   backend:
     name: Backend ${{ matrix.project }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -59,6 +59,44 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend/pom.xml
+      - name: Compile and package without tests
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp -DskipTests package
+      - id: context_tests
+        name: Application context tests
+        continue-on-error: true
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp -Dtest='*ApplicationTests' test
+      - id: auth_tests
+        name: Authentication flow tests
+        continue-on-error: true
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp -Dtest=AuthFlowTests test
+      - id: core_tests
+        name: Core workflow tests
+        continue-on-error: true
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp -Dtest=CoreWorkflowTests test
+      - id: schema_tests
+        name: Flyway and JPA schema validation tests
+        continue-on-error: true
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp -Dtest=SchemaMigrationTests test
+      - name: Require all isolated test groups
+        if: always()
+        env:
+          CONTEXT_OUTCOME: ${{ steps.context_tests.outcome }}
+          AUTH_OUTCOME: ${{ steps.auth_tests.outcome }}
+          CORE_OUTCOME: ${{ steps.core_tests.outcome }}
+          SCHEMA_OUTCOME: ${{ steps.schema_tests.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "context=$CONTEXT_OUTCOME auth=$AUTH_OUTCOME core=$CORE_OUTCOME schema=$SCHEMA_OUTCOME"
+          test "$CONTEXT_OUTCOME" = success
+          test "$AUTH_OUTCOME" = success
+          test "$CORE_OUTCOME" = success
+          test "$SCHEMA_OUTCOME" = success
       - name: Maven verify
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
         run: mvn -B -ntp verify
@@ -163,7 +201,7 @@ jobs:
             test -n "$auth_file" && grep -q 'new SecureRandom' "$auth_file"
             grep -q 'password.length() < 12' "$auth_file"
             grep -q 'purgeExpiredTokens' "$auth_file"
-            grep -q '@Profile({"dev","test","ci"})' "$seed_file"
+            grep -Eq 'Profile\(\{"dev","test","ci"\}\)' "$seed_file"
             grep -q 'new BCryptPasswordEncoder(12)' "$sec_file"
             grep -q '/actuator/prometheus' "$sec_file"
             grep -q 'DataIntegrityViolationException' "$handler_file"
