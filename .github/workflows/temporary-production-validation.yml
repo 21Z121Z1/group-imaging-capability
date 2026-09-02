@@ -14,7 +14,7 @@ concurrency:
 
 env:
   ROOT: validation/work/springboot-vue-nine-projects
-  ARCHIVE_SHA256: 3a02fa35e31cf9a9c7459cd0506e9db6cc5d3dcd5d7eec5b892574482bdd4abe
+  ARCHIVE_SHA256: 0e6786a74c7ad8de182b9549c2b6cf4f9971b973d2da8a7d2ab1a38db8283df4
 
 jobs:
   backend:
@@ -37,8 +37,7 @@ jobs:
           - 09-lab-reservation
     steps:
       - uses: actions/checkout@v4
-      - &extract
-        name: Reconstruct and verify candidate
+      - name: Reconstruct and verify candidate
         run: |
           set -euo pipefail
           mkdir -p validation/work
