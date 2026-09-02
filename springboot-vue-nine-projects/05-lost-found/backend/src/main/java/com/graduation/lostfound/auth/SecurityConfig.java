@@ -1,5 +1,6 @@
 package com.graduation.lostfound.auth;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +27,7 @@ public class SecurityConfig {
 
   @Bean
   SecurityFilterChain chain(HttpSecurity http, BearerTokenFilter bearer, AuthRateLimitFilter limiter,
-                            CorsConfigurationSource corsConfigurationSource) throws Exception {
+                            @Qualifier("cors") CorsConfigurationSource corsConfigurationSource) throws Exception {
     return http
       .csrf(c -> c.disable())
       .cors(c -> c.configurationSource(corsConfigurationSource))
@@ -61,8 +62,8 @@ public class SecurityConfig {
     var c = new CorsConfiguration();
     c.setAllowedOrigins(allowed);
     c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    c.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
-    c.setExposedHeaders(List.of("Location", "X-Request-Id"));
+    c.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+    c.setExposedHeaders(List.of("Location"));
     c.setAllowCredentials(false);
     c.setMaxAge(3600L);
     var s = new UrlBasedCorsConfigurationSource();
