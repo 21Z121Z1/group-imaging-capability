@@ -1,0 +1,1 @@
+{"name":"rental-platform-web","private":true,"version":"1.0.0","type":"module","scripts":{"dev":"vite --port 5103","build":"vite build","preview":"vite preview --port 5103"},"dependencies":{"vue":"^3.5.18"},"devDependencies":{"@vitejs/plugin-vue":"^6.0.1","vite":"^7.1.0"}}

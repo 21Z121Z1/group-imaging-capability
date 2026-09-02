@@ -1,0 +1,1 @@
+package com.graduation.homework.domain;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface SubmissionRepository extends JpaRepository<Submission,Long>{Optional<Submission> findByAssignmentIdAndUserId(Long a,Long u);List<Submission> findTop200ByUserIdOrderByIdDesc(Long u);}

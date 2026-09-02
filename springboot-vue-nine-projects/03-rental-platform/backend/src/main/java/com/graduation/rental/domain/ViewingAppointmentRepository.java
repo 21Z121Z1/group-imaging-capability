@@ -1,0 +1,1 @@
+package com.graduation.rental.domain;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface ViewingAppointmentRepository extends JpaRepository<ViewingAppointment,Long>{List<ViewingAppointment> findTop200ByUserIdOrderByIdDesc(Long id);}

@@ -1,0 +1,4 @@
+package com.graduation.club;
+import org.junit.jupiter.api.Test; import org.springframework.beans.factory.annotation.Autowired; import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc; import org.springframework.boot.test.context.SpringBootTest; import org.springframework.http.MediaType; import org.springframework.test.context.ActiveProfiles; import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*; import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+@SpringBootTest @AutoConfigureMockMvc @ActiveProfiles("test") class AuthFlowTests { @Autowired MockMvc mvc; @Test void seedAdminCanLogin() throws Exception { mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"admin\",\"password\":\"Admin123!Demo\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.token").isNotEmpty()); } }

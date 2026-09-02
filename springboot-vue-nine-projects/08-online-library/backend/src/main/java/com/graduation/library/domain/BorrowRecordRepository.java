@@ -1,0 +1,1 @@
+package com.graduation.library.domain;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface BorrowRecordRepository extends JpaRepository<BorrowRecord,Long>{boolean existsByBookIdAndUserIdAndStatus(Long b,Long u,String s);List<BorrowRecord>findTop200ByUserIdOrderByIdDesc(Long u);}

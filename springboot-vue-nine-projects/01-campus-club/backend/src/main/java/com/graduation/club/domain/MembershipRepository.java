@@ -1,0 +1,1 @@
+package com.graduation.club.domain; import org.springframework.data.jpa.repository.JpaRepository; import java.util.*; public interface MembershipRepository extends JpaRepository<Membership,Long>{ Optional<Membership> findByClubIdAndUserId(Long c,Long u); List<Membership> findTop200ByUserIdOrderByIdDesc(Long u); }

@@ -1,0 +1,1 @@
+package com.graduation.gym.domain;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface GymMembershipRepository extends JpaRepository<GymMembership,Long>{List<GymMembership>findTop200ByUserIdOrderByIdDesc(Long u);}

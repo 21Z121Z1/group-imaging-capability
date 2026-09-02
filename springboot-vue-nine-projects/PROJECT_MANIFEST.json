@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-09-02",
+  "stack": {
+    "java": 21,
+    "springBoot": "3.5.16",
+    "vue": "3.5.x",
+    "vite": "7.x"
+  },
+  "projects": [
+    {
+      "directory": "01-campus-club",
+      "title": "高校社团管理系统",
+      "backendPort": 8101,
+      "frontendPort": 5101
+    },
+    {
+      "directory": "02-snack-groupbuy",
+      "title": "校园零食团购平台",
+      "backendPort": 8102,
+      "frontendPort": 5102
+    },
+    {
+      "directory": "03-rental-platform",
+      "title": "房屋出租信息发布平台",
+      "backendPort": 8103,
+      "frontendPort": 5103
+    },
+    {
+      "directory": "04-homework-management",
+      "title": "课程作业提交管理系统",
+      "backendPort": 8104,
+      "frontendPort": 5104
+    },
+    {
+      "directory": "05-lost-found",
+      "title": "校园失物招领平台",
+      "backendPort": 8105,
+      "frontendPort": 5105
+    },
+    {
+      "directory": "06-gym-membership",
+      "title": "健身房会员管理系统",
+      "backendPort": 8106,
+      "frontendPort": 5106
+    },
+    {
+      "directory": "07-flower-shop",
+      "title": "花卉商品在线销售管理系统",
+      "backendPort": 8107,
+      "frontendPort": 5107
+    },
+    {
+      "directory": "08-online-library",
+      "title": "线上图书借阅管理平台",
+      "backendPort": 8108,
+      "frontendPort": 5108
+    },
+    {
+      "directory": "09-lab-reservation",
+      "title": "校园实验室预约管理系统",
+      "backendPort": 8109,
+      "frontendPort": 5109
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+package com.graduation.flower.domain;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface FlowerOrderRepository extends JpaRepository<FlowerOrder,Long>{List<FlowerOrder>findTop200ByUserIdOrderByIdDesc(Long u);}

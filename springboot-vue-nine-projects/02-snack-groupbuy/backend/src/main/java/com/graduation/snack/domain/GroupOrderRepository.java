@@ -1,0 +1,1 @@
+package com.graduation.snack.domain; import org.springframework.data.jpa.repository.JpaRepository; import java.util.*; public interface GroupOrderRepository extends JpaRepository<GroupOrder,Long>{List<GroupOrder> findTop200ByUserIdOrderByIdDesc(Long id);}

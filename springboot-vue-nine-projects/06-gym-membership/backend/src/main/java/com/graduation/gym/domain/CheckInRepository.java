@@ -1,0 +1,1 @@
+package com.graduation.gym.domain;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface CheckInRepository extends JpaRepository<CheckIn,Long>{List<CheckIn>findTop200ByUserIdOrderByIdDesc(Long u);}

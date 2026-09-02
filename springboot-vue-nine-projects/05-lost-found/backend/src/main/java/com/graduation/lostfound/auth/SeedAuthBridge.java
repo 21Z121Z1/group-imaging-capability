@@ -1,0 +1,1 @@
+package com.graduation.lostfound.auth;import org.springframework.stereotype.Component;@Component public class SeedAuthBridge{private final UserRepository users;public SeedAuthBridge(UserRepository u){users=u;}public Long currentUserSeedId(){return users.findByUsername("admin").orElseThrow().getId();}}

@@ -1,0 +1,1 @@
+package com.graduation.lostfound.domain;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface ClaimRequestRepository extends JpaRepository<ClaimRequest,Long>{boolean existsByPostIdAndUserId(Long p,Long u);List<ClaimRequest>findTop200ByUserIdOrderByIdDesc(Long u);}
