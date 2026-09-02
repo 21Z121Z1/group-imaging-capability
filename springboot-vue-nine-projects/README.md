@@ -31,3 +31,7 @@ Java 21、Spring Boot 3.5.16、Spring Security、Spring Data JPA、Bean Validati
 生产 profile 使用 MySQL + Flyway，Hibernate 仅 `validate`，且 `DB_URL` / `DB_USER` / `DB_PASSWORD` / `APP_CORS_ALLOWED_ORIGINS` 必须由部署环境提供；dev/test/ci 才会创建演示账号。API 使用无状态 opaque Bearer Token（256-bit CSPRNG，数据库仅存 SHA-256 摘要）、BCrypt cost 12、认证端点限速、严格 CORS、安全响应头、统一错误边界、乐观锁、事务与数据库约束。Actuator 仅暴露 health/info/prometheus。
 
 仍应在真实部署层配置 TLS、WAF/反向代理限速、秘密管理、数据库备份、集中日志/告警和最小网络权限；应用内限速是单节点防御层，不替代边缘限速。
+
+## Validation provenance
+
+仓库中的 `.github/workflows/production-suite.yml` 直接针对本目录中的真实源码执行验证，不依赖压缩包、patch 或 reconstruction：9 个后端执行完整 Maven verify、MySQL 8.4 + Flyway/Hibernate 生产启动和非 root 容器构建；9 个前端使用已提交 lockfile 执行可复现 npm ci、生产依赖审计与构建；另执行生产策略不变量以及 Java/JavaScript CodeQL。
