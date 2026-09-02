@@ -5,9 +5,10 @@ import com.graduation.flower.common.ApiException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -23,40 +24,41 @@ public class FlowerOrderController {
     this.auth = auth;
   }
 
-  public record OrderRequest(@NotNull Long productId, @Min(1) @Max(100) int quantity,
-                             @NotBlank @Size(max=64) String recipient,
-                             @NotBlank @Size(max=64) String phone,
-                             @NotBlank @Size(max=255) String address) {}
+  public record OrderRequest(@NotNull @Positive Long productId,
+      @Min(1) @Max(100) int quantity,
+      @NotBlank @Size(max=64) String recipientName,
+      @NotBlank @Pattern(regexp="^[0-9+() -]{6,32}$") String recipientPhone,
+      @NotBlank @Size(max=255) String deliveryAddress,
+      @NotNull @FutureOrPresent LocalDate deliveryDate,
+      @Size(max=1000) String message) {}
 
   @PostMapping
   @Transactional
   public FlowerOrder order(@RequestBody @Valid OrderRequest request) {
     var user = auth.currentUser();
-    var product = products.findLockedById(request.productId()).orElseThrow(() -> ApiException.notFound("花卉"));
-    if (!product.isEnabled()) throw ApiException.badRequest("商品已下架");
+    var product = products.findLockedById(request.productId()).orElseThrow(() -> ApiException.notFound("商品不存在"));
+    if (!"ON_SALE".equals(product.getStatus())) throw ApiException.badRequest("商品已下架");
     if (product.getStock() < request.quantity()) throw ApiException.badRequest("库存不足");
-
     product.setStock(product.getStock() - request.quantity());
     var order = new FlowerOrder();
     order.setUserId(user.getId());
     order.setProductId(product.getId());
     order.setQuantity(request.quantity());
-    order.setUnitPrice(product.getPrice());
     order.setTotalAmount(product.getPrice().multiply(java.math.BigDecimal.valueOf(request.quantity())));
-    order.setRecipient(request.recipient());
-    order.setPhone(request.phone());
-    order.setAddress(request.address());
+    order.setRecipientName(request.recipientName());
+    order.setRecipientPhone(request.recipientPhone());
+    order.setDeliveryAddress(request.deliveryAddress());
+    order.setDeliveryDate(request.deliveryDate());
+    order.setMessage(request.message());
+    order.setStatus("PAID");
     return orders.save(order);
   }
 
-  @GetMapping("/mine")
-  public List<FlowerOrder> mine() {
-    return orders.findTop100ByUserIdOrderByCreatedAtDesc(auth.currentUser().getId());
-  }
-
-  @PreAuthorize("hasRole('ADMIN')")
-  @GetMapping("/admin")
-  public List<FlowerOrder> all() {
-    return orders.findAllByOrderByCreatedAtDesc(PageRequest.of(0,100));
+  @GetMapping
+  public List<FlowerOrder> list() {
+    var user = auth.currentUser();
+    return "ADMIN".equals(user.getRole())
+        ? orders.findAll(PageRequest.of(0,200, Sort.by(Sort.Direction.DESC,"id"))).getContent()
+        : orders.findTop200ByUserIdOrderByIdDesc(user.getId());
   }
 }
