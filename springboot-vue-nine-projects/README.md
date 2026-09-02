@@ -24,7 +24,7 @@ Java 21、Spring Boot 3.5.16、Spring Security、Spring Data JPA、Bean Validati
 有 Maven/npm 环境时运行根目录 `./verify.sh`。脚本会依次执行 9 个后端 `mvn test` 与 9 个前端 `npm install && npm run build`；任何一步失败即退出非零状态。
 
 ## 数据库
-生产默认使用 `prod` profile 并强制外部 MySQL 凭据；本地演示必须显式启用 `dev` profile 才会使用 H2 与演示账号。JPA 自动维护演示表结构，避免首次启动必须手动导入 SQL。
+生产默认使用 `prod` profile 并强制外部 MySQL 凭据；本地演示必须显式启用 `dev` profile 才会使用 H2 与演示账号。生产结构由 Flyway 管理并由 Hibernate `validate` 校验，避免把 JPA 自动建表能力带入生产环境。
 
 ## Production hardening baseline
 
