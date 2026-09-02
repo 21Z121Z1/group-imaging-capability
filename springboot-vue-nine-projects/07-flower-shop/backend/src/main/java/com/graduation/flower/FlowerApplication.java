@@ -1,4 +1,4 @@
-package com.graduation.homework;
+package com.graduation.flower;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -7,6 +7,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
 @EnableScheduling
-public class HomeworkApplication {
-  public static void main(String[] args) { SpringApplication.run(HomeworkApplication.class, args); }
+public class FlowerApplication {
+  public static void main(String[] args) { SpringApplication.run(FlowerApplication.class, args); }
 }
