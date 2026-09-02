@@ -1,0 +1,141 @@
+name: Temporary Production Validation
+
+on:
+  push:
+    branches:
+      - tmp/production-nine-projects-validation-20260902
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-production-nine-projects-validation
+  cancel-in-progress: true
+
+env:
+  PAYLOAD: validation/springboot-vue-nine-projects.zip
+  ROOT: validation/work/springboot-vue-nine-projects
+
+jobs:
+  backend:
+    if: ${{ !contains(github.event.head_commit.message, '[cleanup]') }}
+    name: backend-${{ matrix.project }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - 01-campus-club
+          - 02-snack-groupbuy
+          - 03-rental-platform
+          - 04-homework-management
+          - 05-lost-found
+          - 06-gym-membership
+          - 07-flower-shop
+          - 08-online-library
+          - 09-lab-reservation
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract candidate
+        run: mkdir -p validation/work && unzip -q "$PAYLOAD" -d validation/work
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: ${{ env.ROOT }}/${{ matrix.project }}/backend/pom.xml
+      - name: Maven verify
+        working-directory: ${{ env.ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp -Dstyle.color=always clean verify
+      - name: Inspect packaged JAR
+        working-directory: ${{ env.ROOT }}/${{ matrix.project }}/backend
+        run: |
+          test "$(find target -maxdepth 1 -name '*.jar' ! -name '*.original' | wc -l)" -eq 1
+          jar tf target/*.jar | grep -q 'BOOT-INF/classes/'
+      - name: Upload Surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-${{ matrix.project }}
+          if-no-files-found: ignore
+          path: ${{ env.ROOT }}/${{ matrix.project }}/backend/target/surefire-reports/
+
+  frontend:
+    if: ${{ !contains(github.event.head_commit.message, '[cleanup]') }}
+    name: frontend-${{ matrix.project }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - 01-campus-club
+          - 02-snack-groupbuy
+          - 03-rental-platform
+          - 04-homework-management
+          - 05-lost-found
+          - 06-gym-membership
+          - 07-flower-shop
+          - 08-online-library
+          - 09-lab-reservation
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract candidate
+        run: mkdir -p validation/work && unzip -q "$PAYLOAD" -d validation/work
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install exact dependency graph
+        working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Production build
+        working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
+        run: npm run build
+      - name: Dependency vulnerability gate
+        working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
+        run: npm audit --omit=dev --audit-level=high
+      - name: Validate distribution
+        working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
+        run: |
+          test -s dist/index.html
+          test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
+
+  source-policy:
+    if: ${{ !contains(github.event.head_commit.message, '[cleanup]') }}
+    name: source-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract candidate
+        run: mkdir -p validation/work && unzip -q "$PAYLOAD" -d validation/work
+      - name: Reject obvious generated/build/secrets debris
+        run: |
+          set -euo pipefail
+          ! find "$ROOT" -type d \( -name node_modules -o -name target -o -name .idea -o -name .vscode \) -print -quit | grep -q .
+          ! find "$ROOT" -type f \( -name '*.class' -o -name '*.jar' -o -name '.env' -o -name '*.pem' -o -name '*.key' \) -print -quit | grep -q .
+          test "$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d -name '??-*' | wc -l)" -eq 9
+      - name: Run bundled deep validation
+        working-directory: ${{ env.ROOT }}
+        run: python3 tools/static_validate.py && python3 tools/deep_validate.py
+
+  gate:
+    if: ${{ !contains(github.event.head_commit.message, '[cleanup]') }}
+    name: production-candidate-gate
+    needs: [backend, frontend, source-policy]
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'All backend, frontend, vulnerability, packaging, and source-policy gates passed.'
+
+  cleanup:
+    if: ${{ contains(github.event.head_commit.message, '[cleanup]') }}
+    name: delete-temporary-branch
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Delete current temporary branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/tmp/production-nine-projects-validation-20260902"
