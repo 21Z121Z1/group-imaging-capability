@@ -15,11 +15,29 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SUITE_ROOT: extracted/springboot-vue-nine-projects
+  SUITE_ROOT: springboot-vue-nine-projects
 
 jobs:
+  source-present:
+    name: Direct source present
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: check
+        shell: bash
+        run: |
+          if [ -d "$SUITE_ROOT/01-campus-club" ]; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+          fi
+
   backend:
     name: Backend ${{ matrix.project }}
+    needs: source-present
+    if: needs.source-present.outputs.present == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
@@ -51,8 +69,6 @@ jobs:
           --health-retries=20
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct exact validation source
-        run: bash experiments/production-suite/reconstruct.sh extracted
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -68,7 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           docker build --pull -t "suite/${{ matrix.project }}:${{ github.sha }}" .
-          test "$(docker inspect --format '{{.Config.User}}' "suite/${{ matrix.project }}:${{ github.sha }}")" = "app"
+          test "$(docker inspect --format '{{.Config.User}}' "suite/${{ matrix.project }}:${{ github.sha }}")" = 'app'
       - name: Production MySQL / Flyway / Hibernate smoke
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
         env:
@@ -87,13 +103,19 @@ jobs:
           trap 'kill "$pid" 2>/dev/null || true' EXIT
           ok=0
           for _ in $(seq 1 60); do
-            if curl --silent --fail -H 'X-Request-Id: ci-smoke' "http://127.0.0.1:${{ matrix.port }}/actuator/health" | grep -q '"status":"UP"'; then ok=1; break; fi
+            if curl --silent --fail -H 'X-Request-Id: ci-smoke' "http://127.0.0.1:${{ matrix.port }}/actuator/health" | grep -q '"status":"UP"'; then
+              ok=1
+              break
+            fi
             if ! kill -0 "$pid" 2>/dev/null; then break; fi
             sleep 1
           done
-          if [ "$ok" -ne 1 ]; then cat "/tmp/${{ matrix.project }}.log"; exit 1; fi
-          test "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${{ matrix.port }}/actuator/prometheus")" = "401"
-          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"username":"admin","password":"Admin123!Demo"}' "http://127.0.0.1:${{ matrix.port }}/api/auth/login")" = "401"
+          if [ "$ok" -ne 1 ]; then
+            cat "/tmp/${{ matrix.project }}.log"
+            exit 1
+          fi
+          test "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${{ matrix.port }}/actuator/prometheus")" = '401'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"username":"admin","password":"Admin123!Demo"}' "http://127.0.0.1:${{ matrix.port }}/api/auth/login")" = '401'
           curl -sS -D /tmp/headers -o /dev/null -H 'X-Request-Id: ci-smoke' "http://127.0.0.1:${{ matrix.port }}/actuator/health"
           grep -qi '^X-Request-Id: ci-smoke' /tmp/headers
           kill "$pid"
@@ -109,6 +131,8 @@ jobs:
 
   frontend:
     name: Frontend ${{ matrix.project }}
+    needs: source-present
+    if: needs.source-present.outputs.present == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -126,8 +150,6 @@ jobs:
           - 09-lab-reservation
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct exact validation source
-        run: bash experiments/production-suite/reconstruct.sh extracted
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -147,11 +169,12 @@ jobs:
 
   source-policy:
     name: Production policy invariants
+    needs: source-present
+    if: needs.source-present.outputs.present == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6
-      - run: bash experiments/production-suite/reconstruct.sh extracted
       - name: Verify production source policy
         shell: bash
         run: |
@@ -197,11 +220,12 @@ jobs:
 
   codeql-java:
     name: CodeQL Java
+    needs: source-present
+    if: needs.source-present.outputs.present == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
-      - run: bash experiments/production-suite/reconstruct.sh extracted
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -223,11 +247,12 @@ jobs:
 
   codeql-js:
     name: CodeQL JavaScript
+    needs: source-present
+    if: needs.source-present.outputs.present == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
-      - run: bash experiments/production-suite/reconstruct.sh extracted
       - uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
