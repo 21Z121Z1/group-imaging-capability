@@ -21,7 +21,7 @@ jobs:
   backend:
     name: Backend ${{ matrix.project }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -51,7 +51,7 @@ jobs:
           --health-retries=20
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct validation source
+      - name: Reconstruct exact validation source
         run: bash experiments/production-suite/reconstruct.sh extracted
       - uses: actions/setup-java@v5
         with:
@@ -59,48 +59,17 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend/pom.xml
-      - name: Compile and package without tests
+      - name: Full Maven verify
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
-        run: mvn -B -ntp -DskipTests package
-      - id: context_tests
-        name: Application context tests
-        continue-on-error: true
+        run: mvn -B -ntp verify
+      - name: Build non-root runtime image
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
-        run: mvn -B -ntp -Dtest='*ApplicationTests' test
-      - id: auth_tests
-        name: Authentication flow tests
-        continue-on-error: true
-        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
-        run: mvn -B -ntp -Dtest=AuthFlowTests test
-      - id: core_tests
-        name: Core workflow tests
-        continue-on-error: true
-        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
-        run: mvn -B -ntp -Dtest=CoreWorkflowTests test
-      - id: schema_tests
-        name: Flyway and JPA schema validation tests
-        continue-on-error: true
-        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
-        run: mvn -B -ntp -Dtest=SchemaMigrationTests test
-      - name: Require all isolated test groups
-        if: always()
-        env:
-          CONTEXT_OUTCOME: ${{ steps.context_tests.outcome }}
-          AUTH_OUTCOME: ${{ steps.auth_tests.outcome }}
-          CORE_OUTCOME: ${{ steps.core_tests.outcome }}
-          SCHEMA_OUTCOME: ${{ steps.schema_tests.outcome }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "context=$CONTEXT_OUTCOME auth=$AUTH_OUTCOME core=$CORE_OUTCOME schema=$SCHEMA_OUTCOME"
-          test "$CONTEXT_OUTCOME" = success
-          test "$AUTH_OUTCOME" = success
-          test "$CORE_OUTCOME" = success
-          test "$SCHEMA_OUTCOME" = success
-      - name: Maven verify
-        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
-        run: mvn -B -ntp verify
-      - name: Production profile MySQL/Flyway smoke test
+          docker build --pull -t "suite/${{ matrix.project }}:${{ github.sha }}" .
+          test "$(docker inspect --format '{{.Config.User}}' "suite/${{ matrix.project }}:${{ github.sha }}")" = "app"
+      - name: Production MySQL / Flyway / Hibernate smoke
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
         env:
           SPRING_PROFILES_ACTIVE: prod
@@ -113,19 +82,30 @@ jobs:
           set -euo pipefail
           JAR="$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.original' -print -quit)"
           test -n "$JAR"
-          java -jar "$JAR" >/tmp/${{ matrix.project }}.log 2>&1 &
+          java -jar "$JAR" >"/tmp/${{ matrix.project }}.log" 2>&1 &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
           ok=0
           for _ in $(seq 1 60); do
-            if curl --silent --fail "http://127.0.0.1:${{ matrix.port }}/actuator/health" | grep -q '"status":"UP"'; then ok=1; break; fi
+            if curl --silent --fail -H 'X-Request-Id: ci-smoke' "http://127.0.0.1:${{ matrix.port }}/actuator/health" | grep -q '"status":"UP"'; then ok=1; break; fi
             if ! kill -0 "$pid" 2>/dev/null; then break; fi
             sleep 1
           done
-          if [ "$ok" -ne 1 ]; then cat /tmp/${{ matrix.project }}.log; exit 1; fi
+          if [ "$ok" -ne 1 ]; then cat "/tmp/${{ matrix.project }}.log"; exit 1; fi
           test "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${{ matrix.port }}/actuator/prometheus")" = "401"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"username":"admin","password":"Admin123!Demo"}' "http://127.0.0.1:${{ matrix.port }}/api/auth/login")" = "401"
+          curl -sS -D /tmp/headers -o /dev/null -H 'X-Request-Id: ci-smoke' "http://127.0.0.1:${{ matrix.port }}/actuator/health"
+          grep -qi '^X-Request-Id: ci-smoke' /tmp/headers
           kill "$pid"
           wait "$pid" || true
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports-${{ matrix.project }}
+          path: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend/target/surefire-reports
+          if-no-files-found: ignore
+          retention-days: 3
 
   frontend:
     name: Frontend ${{ matrix.project }}
@@ -146,57 +126,60 @@ jobs:
           - 09-lab-reservation
     steps:
       - uses: actions/checkout@v6
-      - name: Reconstruct validation source
+      - name: Reconstruct exact validation source
         run: bash experiments/production-suite/reconstruct.sh extracted
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Resolve lockfile for this iteration
+      - name: Verify committed lockfile
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
-        run: npm install --package-lock-only --ignore-scripts --no-fund --no-audit
-      - name: Clean install
+        run: test -s package-lock.json
+      - name: Reproducible clean install
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
         run: npm ci --ignore-scripts --no-fund --no-audit
       - name: Production dependency audit
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
         run: npm audit --omit=dev --audit-level=high
-      - name: Build
+      - name: Production build
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
         run: npm run build
-      - name: Upload resolved lockfile
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lock-${{ matrix.project }}
-          path: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend/package-lock.json
-          retention-days: 1
 
   source-policy:
-    name: Security policy invariants
+    name: Production policy invariants
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6
       - run: bash experiments/production-suite/reconstruct.sh extracted
-      - name: Verify production configuration policy
+      - name: Verify production source policy
         shell: bash
         run: |
           set -euo pipefail
           test "$(find "$SUITE_ROOT" -mindepth 1 -maxdepth 1 -type d -name '[0-9][0-9]-*' | wc -l)" -eq 9
-          ! grep -R --line-number -E 'DB_PASSWORD:[^$]|password:[[:space:]]+(root|admin|123456)' "$SUITE_ROOT"/*/backend/src/main/resources/application.yml
+          test "$(find "$SUITE_ROOT" -path '*/frontend/package-lock.json' -type f | wc -l)" -eq 9
+          test "$(find "$SUITE_ROOT" -name RequestCorrelationFilter.java -type f | wc -l)" -eq 9
+          test "$(find "$SUITE_ROOT" -name SecurityRegressionTests.java -type f | wc -l)" -eq 9
+          test "$(find "$SUITE_ROOT" -name Dockerfile -type f | wc -l)" -eq 9
           ! grep -R --line-number -E 'localStorage|sessionStorage' "$SUITE_ROOT"/*/frontend/src
+          ! grep -R --line-number 'findAll()' "$SUITE_ROOT"/*/backend/src/main/java --include='*Controller.java'
+          ! grep -R --line-number -E '@RequestBody[[:space:]]+(Club|ClubActivity|SnackProduct|GroupCampaign|RentalListing|Course|Assignment|LostFoundPost|MembershipPlan|FlowerProduct|Book|Laboratory)[[:space:]]' "$SUITE_ROOT"/*/backend/src/main/java
+          ! grep -R --line-number -E 'DB_PASSWORD:[^$]|password:[[:space:]]+(root|admin|123456)' "$SUITE_ROOT"/*/backend/src/main/resources/application.yml
           for p in "$SUITE_ROOT"/[0-9][0-9]-*; do
+            test -s "$p/frontend/package-lock.json"
             grep -q 'default: prod' "$p/backend/src/main/resources/application.yml"
             grep -q 'ddl-auto: validate' "$p/backend/src/main/resources/application.yml"
             grep -q 'validate-on-migrate: true' "$p/backend/src/main/resources/application.yml"
             grep -q 'APP_CORS_ALLOWED_ORIGINS' "$p/backend/src/main/resources/application.yml"
+            grep -q 'console: logstash' "$p/backend/src/main/resources/application.yml"
+            grep -q '^USER app$' "$p/backend/Dockerfile"
             user_file="$(find "$p/backend/src/main/java" -path '*/auth/User.java' -print -quit)"
             auth_file="$(find "$p/backend/src/main/java" -path '*/auth/AuthService.java' -print -quit)"
             seed_file="$(find "$p/backend/src/main/java" -path '*/auth/AuthSeed.java' -print -quit)"
             sec_file="$(find "$p/backend/src/main/java" -path '*/auth/SecurityConfig.java' -print -quit)"
             handler_file="$(find "$p/backend/src/main/java" -path '*/common/GlobalExceptionHandler.java' -print -quit)"
             token_file="$(find "$p/backend/src/main/java" -path '*/auth/AuthToken.java' -print -quit)"
+            request_id_file="$(find "$p/backend/src/main/java" -path '*/common/RequestCorrelationFilter.java' -print -quit)"
             test -n "$user_file" && grep -q '@JsonIgnore' "$user_file"
             test -n "$auth_file" && grep -q 'new SecureRandom' "$auth_file"
             grep -q 'password.length() < 12' "$auth_file"
@@ -204,16 +187,18 @@ jobs:
             grep -Eq 'Profile\(\{"dev","test","ci"\}\)' "$seed_file"
             grep -q 'new BCryptPasswordEncoder(12)' "$sec_file"
             grep -q '/actuator/prometheus' "$sec_file"
+            grep -q 'X-Request-Id' "$sec_file"
             grep -q 'DataIntegrityViolationException' "$handler_file"
             grep -q 'ObjectOptimisticLockingFailureException' "$handler_file"
             grep -q 'idx_auth_expires' "$token_file"
+            grep -q 'X-Request-Id' "$request_id_file"
             grep -q 'idx_auth_token_expires_at' "$p/backend/src/main/resources/db/migration/V1__baseline.sql"
           done
 
   codeql-java:
     name: CodeQL Java
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
       - run: bash experiments/production-suite/reconstruct.sh extracted
