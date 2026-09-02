@@ -1,0 +1,2 @@
+Production validation trigger for the concurrency-hardening candidate.
+The validation target includes pessimistic locking for stock and borrowing flows, a Flyway V2 borrowing lookup index, lock-policy regression tests, and removal of Spring Boot's generated default user surface.
