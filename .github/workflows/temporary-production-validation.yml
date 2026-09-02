@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PAYLOAD: validation/springboot-vue-nine-projects.zip
   ROOT: validation/work/springboot-vue-nine-projects
+  ARCHIVE_SHA256: 3a02fa35e31cf9a9c7459cd0506e9db6cc5d3dcd5d7eec5b892574482bdd4abe
 
 jobs:
   backend:
@@ -37,8 +37,15 @@ jobs:
           - 09-lab-reservation
     steps:
       - uses: actions/checkout@v4
-      - name: Extract candidate
-        run: mkdir -p validation/work && unzip -q "$PAYLOAD" -d validation/work
+      - &extract
+        name: Reconstruct and verify candidate
+        run: |
+          set -euo pipefail
+          mkdir -p validation/work
+          cat validation/payload/part-*.b64 | base64 --decode > validation/source.tar.xz
+          echo "$ARCHIVE_SHA256  validation/source.tar.xz" | sha256sum --check --strict
+          tar -xJf validation/source.tar.xz -C validation/work
+          test -d "$ROOT/${{ matrix.project }}"
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -51,8 +58,10 @@ jobs:
       - name: Inspect packaged JAR
         working-directory: ${{ env.ROOT }}/${{ matrix.project }}/backend
         run: |
-          test "$(find target -maxdepth 1 -name '*.jar' ! -name '*.original' | wc -l)" -eq 1
-          jar tf target/*.jar | grep -q 'BOOT-INF/classes/'
+          set -euo pipefail
+          jar_path="$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.original' -print -quit)"
+          test -n "$jar_path"
+          jar tf "$jar_path" | grep -q 'BOOT-INF/classes/'
       - name: Upload Surefire reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -81,25 +90,33 @@ jobs:
           - 09-lab-reservation
     steps:
       - uses: actions/checkout@v4
-      - name: Extract candidate
-        run: mkdir -p validation/work && unzip -q "$PAYLOAD" -d validation/work
+      - name: Reconstruct and verify candidate
+        run: |
+          set -euo pipefail
+          mkdir -p validation/work
+          cat validation/payload/part-*.b64 | base64 --decode > validation/source.tar.xz
+          echo "$ARCHIVE_SHA256  validation/source.tar.xz" | sha256sum --check --strict
+          tar -xJf validation/source.tar.xz -C validation/work
+          test -d "$ROOT/${{ matrix.project }}"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install exact dependency graph
+      - name: Resolve dependency graph for baseline audit
         working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          npm ci --ignore-scripts --no-audit --no-fund
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Reproducible install
+        working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Production build
         working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
         run: npm run build
-      - name: Dependency vulnerability gate
+      - name: Runtime dependency vulnerability gate
         working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
         run: npm audit --omit=dev --audit-level=high
       - name: Validate distribution
         working-directory: ${{ env.ROOT }}/${{ matrix.project }}/frontend
         run: |
+          set -euo pipefail
           test -s dist/index.html
           test -n "$(find dist/assets -type f -name '*.js' -print -quit)"
 
@@ -110,9 +127,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Extract candidate
-        run: mkdir -p validation/work && unzip -q "$PAYLOAD" -d validation/work
-      - name: Reject obvious generated/build/secrets debris
+      - name: Reconstruct and verify candidate
+        run: |
+          set -euo pipefail
+          mkdir -p validation/work
+          cat validation/payload/part-*.b64 | base64 --decode > validation/source.tar.xz
+          echo "$ARCHIVE_SHA256  validation/source.tar.xz" | sha256sum --check --strict
+          tar -xJf validation/source.tar.xz -C validation/work
+      - name: Reject generated build output and likely secrets
         run: |
           set -euo pipefail
           ! find "$ROOT" -type d \( -name node_modules -o -name target -o -name .idea -o -name .vscode \) -print -quit | grep -q .
@@ -128,7 +150,7 @@ jobs:
     needs: [backend, frontend, source-policy]
     runs-on: ubuntu-24.04
     steps:
-      - run: echo 'All backend, frontend, vulnerability, packaging, and source-policy gates passed.'
+      - run: echo 'All baseline backend, frontend, vulnerability, packaging, and source-policy gates passed.'
 
   cleanup:
     if: ${{ contains(github.event.head_commit.message, '[cleanup]') }}
