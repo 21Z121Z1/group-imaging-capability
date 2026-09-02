@@ -1,0 +1,162 @@
+name: Production Suite Validation
+
+on:
+  push:
+    branches:
+      - tmp/production-suite-validation-20260902
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: production-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SUITE_ROOT: extracted/springboot-vue-nine-projects
+
+jobs:
+  backend:
+    name: Backend ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - 01-campus-club
+          - 02-snack-groupbuy
+          - 03-rental-platform
+          - 04-homework-management
+          - 05-lost-found
+          - 06-gym-membership
+          - 07-flower-shop
+          - 08-online-library
+          - 09-lab-reservation
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reconstruct validation source
+        run: bash experiments/production-suite/reconstruct.sh extracted
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend/pom.xml
+      - name: Maven verify
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp verify
+
+  frontend:
+    name: Frontend ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - 01-campus-club
+          - 02-snack-groupbuy
+          - 03-rental-platform
+          - 04-homework-management
+          - 05-lost-found
+          - 06-gym-membership
+          - 07-flower-shop
+          - 08-online-library
+          - 09-lab-reservation
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reconstruct validation source
+        run: bash experiments/production-suite/reconstruct.sh extracted
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Resolve deterministic dependency graph
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
+        run: npm install --package-lock-only --ignore-scripts --no-fund --no-audit
+      - name: Clean install
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
+        run: npm ci --ignore-scripts --no-fund --no-audit
+      - name: Production dependency audit
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
+        run: npm audit --omit=dev --audit-level=high
+      - name: Build
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
+        run: npm run build
+      - name: Upload resolved lockfile
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lock-${{ matrix.project }}
+          path: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend/package-lock.json
+          retention-days: 1
+
+  source-policy:
+    name: Security policy invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - run: bash experiments/production-suite/reconstruct.sh extracted
+      - name: Verify production configuration policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find "$SUITE_ROOT" -mindepth 1 -maxdepth 1 -type d -name '[0-9][0-9]-*' | wc -l)" -eq 9
+          ! grep -R --line-number -E 'DB_PASSWORD:[^$]|password:[[:space:]]+(root|admin|123456)' "$SUITE_ROOT"/*/backend/src/main/resources/application.yml
+          ! grep -R --line-number 'localStorage' "$SUITE_ROOT"/*/frontend/src
+          for p in "$SUITE_ROOT"/[0-9][0-9]-*; do
+            grep -q 'ddl-auto: validate' "$p/backend/src/main/resources/application.yml"
+            grep -q 'flyway:' "$p/backend/src/main/resources/application.yml"
+            user_file="$(find "$p/backend/src/main/java" -path '*/auth/User.java' -print -quit)"
+            auth_file="$(find "$p/backend/src/main/java" -path '*/auth/AuthService.java' -print -quit)"
+            sec_file="$(find "$p/backend/src/main/java" -path '*/auth/SecurityConfig.java' -print -quit)"
+            test -n "$user_file" && grep -q '@JsonIgnore' "$user_file"
+            test -n "$auth_file" && grep -q 'new SecureRandom' "$auth_file"
+            test -n "$sec_file" && grep -q 'new BCryptPasswordEncoder(12)' "$sec_file"
+            test -f "$p/backend/src/main/resources/db/migration/V1__baseline.sql"
+          done
+
+  codeql-java:
+    name: CodeQL Java
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - run: bash experiments/production-suite/reconstruct.sh extracted
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: manual
+      - name: Build all Java projects under CodeQL tracing
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in "$SUITE_ROOT"/[0-9][0-9]-*/backend; do
+            (cd "$p" && mvn -B -ntp -DskipTests package)
+          done
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:java-kotlin
+
+  codeql-js:
+    name: CodeQL JavaScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - run: bash experiments/production-suite/reconstruct.sh extracted
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:javascript-typescript
