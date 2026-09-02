@@ -15,6 +15,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Locale;
 
 @Service
@@ -135,7 +136,7 @@ public class AuthService {
   private String hash(String raw) {
     try {
       byte[] digest = MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8));
-      return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+      return HexFormat.of().formatHex(digest);
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException("SHA-256 unavailable", e);
     }

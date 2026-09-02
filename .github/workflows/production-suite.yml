@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
   group: production-suite-${{ github.ref }}
@@ -20,11 +19,13 @@ env:
 jobs:
   source-present:
     name: Direct source present
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       present: ${{ steps.check.outputs.present }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - id: check
         shell: bash
         run: |
@@ -38,7 +39,7 @@ jobs:
     name: Backend ${{ matrix.project }}
     needs: source-present
     if: needs.source-present.outputs.present == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -68,8 +69,10 @@ jobs:
           --health-timeout=5s
           --health-retries=20
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
@@ -122,7 +125,7 @@ jobs:
           wait "$pid" || true
       - name: Upload test reports on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: backend-test-reports-${{ matrix.project }}
           path: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend/target/surefire-reports
@@ -133,7 +136,7 @@ jobs:
     name: Frontend ${{ matrix.project }}
     needs: source-present
     if: needs.source-present.outputs.present == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -149,10 +152,12 @@ jobs:
           - 08-online-library
           - 09-lab-reservation
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          node-version: '24'
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.19.0'
           package-manager-cache: false
       - name: Verify committed lockfile
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
@@ -171,10 +176,12 @@ jobs:
     name: Production policy invariants
     needs: source-present
     if: needs.source-present.outputs.present == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Verify production source policy
         shell: bash
         run: |
@@ -184,7 +191,7 @@ jobs:
           test "$(find "$SUITE_ROOT" -name RequestCorrelationFilter.java -type f | wc -l)" -eq 9
           test "$(find "$SUITE_ROOT" -name SecurityRegressionTests.java -type f | wc -l)" -eq 9
           test "$(find "$SUITE_ROOT" -name Dockerfile -type f | wc -l)" -eq 9
-          ! grep -R --line-number -E 'localStorage|sessionStorage' "$SUITE_ROOT"/*/frontend/src
+          ! grep -R --line-number -E 'localStorage|sessionStorage|v-html' "$SUITE_ROOT"/*/frontend/src
           ! grep -R --line-number 'findAll()' "$SUITE_ROOT"/*/backend/src/main/java --include='*Controller.java'
           ! grep -R --line-number -E '@RequestBody[[:space:]]+(Club|ClubActivity|SnackProduct|GroupCampaign|RentalListing|Course|Assignment|LostFoundPost|MembershipPlan|FlowerProduct|Book|Laboratory)[[:space:]]' "$SUITE_ROOT"/*/backend/src/main/java
           ! grep -R --line-number -E 'DB_PASSWORD:[^$]|password:[[:space:]]+(root|admin|123456)' "$SUITE_ROOT"/*/backend/src/main/resources/application.yml
@@ -207,12 +214,14 @@ jobs:
             test -n "$auth_file" && grep -q 'new SecureRandom' "$auth_file"
             grep -q 'password.length() < 12' "$auth_file"
             grep -q 'purgeExpiredTokens' "$auth_file"
+            grep -q 'HexFormat' "$auth_file"
             grep -Eq 'Profile\(\{"dev","test","ci"\}\)' "$seed_file"
             grep -q 'new BCryptPasswordEncoder(12)' "$sec_file"
             grep -q '/actuator/prometheus' "$sec_file"
-            grep -q 'X-Request-Id' "$sec_file"
+            grep -q '@Qualifier("cors")' "$sec_file"
             grep -q 'DataIntegrityViolationException' "$handler_file"
             grep -q 'ObjectOptimisticLockingFailureException' "$handler_file"
+            grep -q 'AccessDeniedException' "$handler_file"
             grep -q 'idx_auth_expires' "$token_file"
             grep -q 'X-Request-Id' "$request_id_file"
             grep -q 'idx_auth_token_expires_at' "$p/backend/src/main/resources/db/migration/V1__baseline.sql"
@@ -222,15 +231,20 @@ jobs:
     name: CodeQL Java
     needs: source-present
     if: needs.source-present.outputs.present == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
-      - uses: github/codeql-action/init@v4
+      - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           languages: java-kotlin
           build-mode: manual
@@ -241,7 +255,7 @@ jobs:
           for p in "$SUITE_ROOT"/[0-9][0-9]-*/backend; do
             (cd "$p" && mvn -B -ntp -DskipTests package)
           done
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           category: /language:java-kotlin
 
@@ -249,14 +263,19 @@ jobs:
     name: CodeQL JavaScript
     needs: source-present
     if: needs.source-present.outputs.present == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: github/codeql-action/init@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           languages: javascript-typescript
           build-mode: none
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           category: /language:javascript-typescript

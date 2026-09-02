@@ -1,5 +1,6 @@
 package com.graduation.library.common;
 import org.springframework.http.*;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -24,6 +25,8 @@ public class GlobalExceptionHandler {
   public ResponseEntity<Map<String,Object>> integrity(DataIntegrityViolationException ex) { return body(HttpStatus.CONFLICT, "数据约束冲突"); }
   @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
   public ResponseEntity<Map<String,Object>> optimistic(ObjectOptimisticLockingFailureException ex) { return body(HttpStatus.CONFLICT, "数据已被其他请求修改，请刷新后重试"); }
+  @ExceptionHandler(AccessDeniedException.class)
+  public ResponseEntity<Map<String,Object>> forbidden(AccessDeniedException ex) { return body(HttpStatus.FORBIDDEN, "无权限"); }
   @ExceptionHandler(Exception.class)
   public ResponseEntity<Map<String,Object>> other(Exception ex) { return body(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误"); }
   private ResponseEntity<Map<String,Object>> body(HttpStatus status, String message) {
