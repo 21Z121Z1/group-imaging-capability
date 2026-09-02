@@ -1,0 +1,102 @@
+name: Backend Full Verify Diagnostic
+
+on:
+  push:
+    branches:
+      - tmp/production-suite-validation-20260902
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SUITE_ROOT: extracted/springboot-vue-nine-projects
+
+jobs:
+  backend:
+    name: Diagnostic ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { project: 01-campus-club, port: 8101 }
+          - { project: 02-snack-groupbuy, port: 8102 }
+          - { project: 03-rental-platform, port: 8103 }
+          - { project: 04-homework-management, port: 8104 }
+          - { project: 05-lost-found, port: 8105 }
+          - { project: 06-gym-membership, port: 8106 }
+          - { project: 07-flower-shop, port: 8107 }
+          - { project: 08-online-library, port: 8108 }
+          - { project: 09-lab-reservation, port: 8109 }
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root-test-only
+          MYSQL_ROOT_HOST: "%"
+          MYSQL_DATABASE: suite_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot-test-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reconstruct validation source
+        run: bash experiments/production-suite/reconstruct.sh extracted
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend/pom.xml
+      - name: Package without tests
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp -DskipTests package
+      - id: full_verify
+        name: Full Maven verify
+        continue-on-error: true
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        run: mvn -B -ntp verify
+      - id: prod_smoke
+        name: Production MySQL Flyway smoke
+        if: always()
+        continue-on-error: true
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_URL: jdbc:mysql://127.0.0.1:3306/suite_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+          DB_USER: root
+          DB_PASSWORD: root-test-only
+          APP_CORS_ALLOWED_ORIGINS: https://example.test
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.original' -print -quit)"
+          test -n "$JAR"
+          java -jar "$JAR" >/tmp/${{ matrix.project }}.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ok=0
+          for _ in $(seq 1 60); do
+            if curl --silent --fail "http://127.0.0.1:${{ matrix.port }}/actuator/health" | grep -q '"status":"UP"'; then ok=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ok" -ne 1 ]; then cat /tmp/${{ matrix.project }}.log; exit 1; fi
+          test "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${{ matrix.port }}/actuator/prometheus")" = "401"
+          kill "$pid"
+          wait "$pid" || true
+      - name: Fail if a diagnostic gate failed
+        if: >-
+          always() &&
+          (steps.full_verify.outcome != 'success' || steps.prod_smoke.outcome != 'success')
+        run: exit 1
