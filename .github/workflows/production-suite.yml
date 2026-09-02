@@ -21,20 +21,34 @@ jobs:
   backend:
     name: Backend ${{ matrix.project }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        project:
-          - 01-campus-club
-          - 02-snack-groupbuy
-          - 03-rental-platform
-          - 04-homework-management
-          - 05-lost-found
-          - 06-gym-membership
-          - 07-flower-shop
-          - 08-online-library
-          - 09-lab-reservation
+        include:
+          - { project: 01-campus-club, port: 8101 }
+          - { project: 02-snack-groupbuy, port: 8102 }
+          - { project: 03-rental-platform, port: 8103 }
+          - { project: 04-homework-management, port: 8104 }
+          - { project: 05-lost-found, port: 8105 }
+          - { project: 06-gym-membership, port: 8106 }
+          - { project: 07-flower-shop, port: 8107 }
+          - { project: 08-online-library, port: 8108 }
+          - { project: 09-lab-reservation, port: 8109 }
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root-test-only
+          MYSQL_ROOT_HOST: "%"
+          MYSQL_DATABASE: suite_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot-test-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     steps:
       - uses: actions/checkout@v6
       - name: Reconstruct validation source
@@ -48,6 +62,32 @@ jobs:
       - name: Maven verify
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
         run: mvn -B -ntp verify
+      - name: Production profile MySQL/Flyway smoke test
+        working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/backend
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_URL: jdbc:mysql://127.0.0.1:3306/suite_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+          DB_USER: root
+          DB_PASSWORD: root-test-only
+          APP_CORS_ALLOWED_ORIGINS: https://example.test
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.original' -print -quit)"
+          test -n "$JAR"
+          java -jar "$JAR" >/tmp/${{ matrix.project }}.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ok=0
+          for _ in $(seq 1 60); do
+            if curl --silent --fail "http://127.0.0.1:${{ matrix.port }}/actuator/health" | grep -q '"status":"UP"'; then ok=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ok" -ne 1 ]; then cat /tmp/${{ matrix.project }}.log; exit 1; fi
+          test "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${{ matrix.port }}/actuator/prometheus")" = "401"
+          kill "$pid"
+          wait "$pid" || true
 
   frontend:
     name: Frontend ${{ matrix.project }}
@@ -74,7 +114,7 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Resolve deterministic dependency graph
+      - name: Resolve lockfile for this iteration
         working-directory: ${{ env.SUITE_ROOT }}/${{ matrix.project }}/frontend
         run: npm install --package-lock-only --ignore-scripts --no-fund --no-audit
       - name: Clean install
@@ -107,17 +147,29 @@ jobs:
           set -euo pipefail
           test "$(find "$SUITE_ROOT" -mindepth 1 -maxdepth 1 -type d -name '[0-9][0-9]-*' | wc -l)" -eq 9
           ! grep -R --line-number -E 'DB_PASSWORD:[^$]|password:[[:space:]]+(root|admin|123456)' "$SUITE_ROOT"/*/backend/src/main/resources/application.yml
-          ! grep -R --line-number 'localStorage' "$SUITE_ROOT"/*/frontend/src
+          ! grep -R --line-number -E 'localStorage|sessionStorage' "$SUITE_ROOT"/*/frontend/src
           for p in "$SUITE_ROOT"/[0-9][0-9]-*; do
+            grep -q 'default: prod' "$p/backend/src/main/resources/application.yml"
             grep -q 'ddl-auto: validate' "$p/backend/src/main/resources/application.yml"
-            grep -q 'flyway:' "$p/backend/src/main/resources/application.yml"
+            grep -q 'validate-on-migrate: true' "$p/backend/src/main/resources/application.yml"
+            grep -q 'APP_CORS_ALLOWED_ORIGINS' "$p/backend/src/main/resources/application.yml"
             user_file="$(find "$p/backend/src/main/java" -path '*/auth/User.java' -print -quit)"
             auth_file="$(find "$p/backend/src/main/java" -path '*/auth/AuthService.java' -print -quit)"
+            seed_file="$(find "$p/backend/src/main/java" -path '*/auth/AuthSeed.java' -print -quit)"
             sec_file="$(find "$p/backend/src/main/java" -path '*/auth/SecurityConfig.java' -print -quit)"
+            handler_file="$(find "$p/backend/src/main/java" -path '*/common/GlobalExceptionHandler.java' -print -quit)"
+            token_file="$(find "$p/backend/src/main/java" -path '*/auth/AuthToken.java' -print -quit)"
             test -n "$user_file" && grep -q '@JsonIgnore' "$user_file"
             test -n "$auth_file" && grep -q 'new SecureRandom' "$auth_file"
-            test -n "$sec_file" && grep -q 'new BCryptPasswordEncoder(12)' "$sec_file"
-            test -f "$p/backend/src/main/resources/db/migration/V1__baseline.sql"
+            grep -q 'password.length() < 12' "$auth_file"
+            grep -q 'purgeExpiredTokens' "$auth_file"
+            grep -q '@Profile({"dev","test","ci"})' "$seed_file"
+            grep -q 'new BCryptPasswordEncoder(12)' "$sec_file"
+            grep -q '/actuator/prometheus' "$sec_file"
+            grep -q 'DataIntegrityViolationException' "$handler_file"
+            grep -q 'ObjectOptimisticLockingFailureException' "$handler_file"
+            grep -q 'idx_auth_expires' "$token_file"
+            grep -q 'idx_auth_token_expires_at' "$p/backend/src/main/resources/db/migration/V1__baseline.sql"
           done
 
   codeql-java:
