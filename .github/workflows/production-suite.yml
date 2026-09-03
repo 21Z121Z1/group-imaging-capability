@@ -192,6 +192,11 @@ jobs:
           test "$(find "$SUITE_ROOT" -name SecurityRegressionTests.java -type f | wc -l)" -eq 9
           test "$(find "$SUITE_ROOT" -name Dockerfile -type f | wc -l)" -eq 9
           ! grep -R --line-number -E 'localStorage|sessionStorage|v-html' "$SUITE_ROOT"/*/frontend/src
+          ! grep -R --line-number -E 'Admin123!Demo|Student123!Demo|DEMO ACCESS|后端运行于[[:space:]]*:[0-9]+|前端开发端口' "$SUITE_ROOT"/*/frontend/src
+          ! grep -R --line-number -E '[A-Za-z]+Id[[:space:]]*:[[:space:]]*1([,}])' "$SUITE_ROOT"/*/frontend/src
+          ! grep -R --line-number -F "message.includes('401')" "$SUITE_ROOT"/*/frontend/src
+          test "$(grep -R -l 'class ApiError' "$SUITE_ROOT"/*/frontend/src/api.js | wc -l)" -eq 9
+          test "$(grep -R -l 'AbortController' "$SUITE_ROOT"/*/frontend/src/api.js | wc -l)" -eq 9
           ! grep -R --line-number 'findAll()' "$SUITE_ROOT"/*/backend/src/main/java --include='*Controller.java'
           ! grep -R --line-number -E '@RequestBody[[:space:]]+(Club|ClubActivity|SnackProduct|GroupCampaign|RentalListing|Course|Assignment|LostFoundPost|MembershipPlan|FlowerProduct|Book|Laboratory)[[:space:]]' "$SUITE_ROOT"/*/backend/src/main/java
           ! grep -R --line-number -E 'DB_PASSWORD:[^$]|password:[[:space:]]+(root|admin|123456)' "$SUITE_ROOT"/*/backend/src/main/resources/application.yml
