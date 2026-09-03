@@ -1,25 +1,14 @@
 <script setup>
-import {computed,onMounted,ref} from 'vue'; import {api,session} from './api';
-const username=ref('admin'),password=ref('Admin123!Demo'),user=ref(null),rows=ref([]),error=ref(''),busy=ref(false),notice=ref('');
-const count=computed(()=>rows.value.length);
-async function login(){try{busy.value=true;error.value='';const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:username.value,password:password.value})});session.token=r.token;user.value=r.user;await load();}catch(e){error.value=e.message}finally{busy.value=false}}
-async function load(){try{rows.value=await api('/api/listings')}catch(e){if(e.message.includes('401'))logout();else error.value=e.message}}
-async function me(){if(!session.token)return;try{user.value=await api('/api/auth/me');await load()}catch{session.token=''}}
-function logout(){session.token='';user.value=null;rows.value=[]}
-async function quick(){try{busy.value=true;notice.value='';await api('/api/appointments',{method:'POST',body:JSON.stringify({listingId:1,visitTime:new Date(Date.now()+86400000).toISOString().slice(0,19),note:'希望实地看房'})});notice.value='操作已提交';await load()}catch(e){error.value=e.message}finally{busy.value=false}}
-onMounted(me);
+import { computed, ref } from 'vue';
+import { ApiError, api, session } from './api';
+const tomorrow=()=>{const d=new Date(Date.now()+86400000);d.setHours(14,0,0,0);const z=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`};
+const username=ref(''),password=ref(''),user=ref(null),rows=ref([]),listingId=ref(null),visitTime=ref(tomorrow()),note=ref(''),error=ref(''),notice=ref(''),busy=ref(false);const count=computed(()=>rows.value.length);
+function logout(message=''){session.token='';user.value=null;rows.value=[];listingId.value=null;if(message)error.value=message}function fail(e){if(e instanceof ApiError&&e.status===401)return logout('会话已失效，请重新登录');error.value=e?.message||'操作失败，请重试'}
+async function load(){try{rows.value=await api('/api/listings');if(!rows.value.some(x=>x.id===listingId.value))listingId.value=rows.value[0]?.id??null}catch(e){fail(e)}}
+async function login(){if(!username.value.trim()||!password.value)return;busy.value=true;error.value='';try{const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:username.value.trim(),password:password.value})});session.token=r.token;user.value=r.user;password.value='';await load()}catch(e){fail(e)}finally{busy.value=false}}
+async function book(){if(!listingId.value||!visitTime.value)return;busy.value=true;error.value='';notice.value='';try{await api('/api/appointments',{method:'POST',body:JSON.stringify({listingId:listingId.value,visitTime:visitTime.value.length===16?visitTime.value+':00':visitTime.value,note:note.value.trim()})});notice.value='看房预约已提交。';note.value=''}catch(e){fail(e)}finally{busy.value=false}}
 </script>
-<template>
-  <div class="app-shell">
-    <div class="mast">RENT / CITY / HOME</div>
-    <main class="main">
-      <header class="top"><div><p class="eyebrow">清晰、可信的租住信息</p><h1>ROOMLINE</h1></div><div v-if="user" class="account"><span>{{user.displayName}} · {{user.role}}</span><button class="ghost" @click="logout">退出</button></div></header>
-      <section v-if="!user" class="login-card"><div><small>DEMO ACCESS</small><h2>进入ROOMLINE</h2><p>管理员：admin / Admin123!Demo<br>普通用户：student / Student123!Demo</p></div><form @submit.prevent="login"><input v-model="username" placeholder="用户名"><input v-model="password" type="password" placeholder="密码"><button :disabled="busy">登录</button></form></section>
-      <template v-else>
-        <section class="hero"><div><span class="kicker">房源</span><strong>{{count}}</strong><p>当前数据条目</p></div><div class="hero-copy"><h2>房屋出租信息发布平台</h2><p>后端运行于 :8103，前端开发端口 :5103。当前页面直接读取真实 REST API。</p><button @click="quick" :disabled="busy">预约看 1 号房源</button></div></section>
-        <p v-if="notice" class="notice">{{notice}}</p><p v-if="error" class="error">{{error}}</p>
-        <section class="panel"><div class="panel-head"><h3>房源</h3><button class="ghost" @click="load">刷新</button></div><div class="cards"><article v-for="row in rows" :key="row.id" class="data-card"><span class="id">#{{row.id}}</span><h4>{{row.name || row.title || row.code || row.isbn || ('记录 '+row.id)}}</h4><p>{{row.description || row.category || row.address || row.author || row.building || row.status || '暂无描述'}}</p><small>{{row.status || row.type || row.role || 'ACTIVE'}}</small></article><div v-if="!rows.length" class="empty">暂无数据</div></div></section>
-      </template>
-    </main>
-  </div>
-</template>
+<template><div class="app-shell"><div class="mast">RENT / CITY / HOME</div><main class="main"><header class="top"><div><p class="eyebrow">清晰、可信的租住信息</p><h1>ROOMLINE</h1></div><div v-if="user" class="account"><span>{{user.displayName}} · {{user.role}}</span><button class="ghost" @click="logout()">退出</button></div></header>
+<section v-if="!user" class="login-card"><div><small>SECURE ACCESS</small><h2>进入 ROOMLINE</h2><p>登录后可浏览房源并提交看房预约。</p></div><form @submit.prevent="login"><label>用户名<input v-model.trim="username" autocomplete="username" maxlength="32" required></label><label>密码<input v-model="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required></label><button :disabled="busy">{{busy?'登录中…':'登录'}}</button></form></section>
+<template v-else><section class="hero"><div><span class="kicker">房源</span><strong>{{count}}</strong><p>当前可见房源</p></div><div class="hero-copy"><h2>房屋出租信息发布平台</h2><p>房源数据与预约状态均来自受保护的 REST API，不依赖固定记录编号。</p></div></section><section class="action-panel"><div><span class="kicker">VIEWING</span><h3>预约看房</h3><p>选择房源、预约时间并留下必要备注。</p></div><form @submit.prevent="book"><label>房源<select v-model.number="listingId" required><option disabled :value="null">请选择房源</option><option v-for="x in rows" :key="x.id" :value="x.id">{{x.title||x.address||('房源 #'+x.id)}} · #{{x.id}}</option></select></label><label>看房时间<input v-model="visitTime" type="datetime-local" required></label><label>备注<textarea v-model.trim="note" maxlength="1000" rows="3" placeholder="联系方式偏好、到访人数等"></textarea></label><button :disabled="busy||!listingId">提交预约</button></form></section><p v-if="notice" class="notice" role="status">{{notice}}</p><p v-if="error" class="error" role="alert">{{error}}</p><section class="panel"><div class="panel-head"><h3>房源</h3><button class="ghost" :disabled="busy" @click="load">刷新</button></div><div class="cards"><article v-for="row in rows" :key="row.id" class="data-card"><span class="id">#{{row.id}}</span><h4>{{row.title||('房源 '+row.id)}}</h4><p>{{row.address||row.description||'地址待补充'}}</p><small>{{row.status}}</small></article><div v-if="!rows.length" class="empty">暂无可见房源</div></div></section></template></main></div></template>
+<style scoped>.action-panel{display:grid;grid-template-columns:minmax(220px,.65fr) minmax(320px,1.35fr);gap:28px;margin-bottom:28px;padding:28px;border-radius:2px;background:#fff;border:1px solid #1f2937}.action-panel h3{margin:.35rem 0}.action-panel label,.login-card label{display:grid;gap:7px;font-size:.86rem;font-weight:700}.action-panel select,.action-panel textarea{padding:13px 15px;border:1px solid #9ca3af;background:#fff;font:inherit}.action-panel textarea{resize:vertical}.action-panel button:disabled{opacity:.5}@media(max-width:760px){.action-panel{grid-template-columns:1fr}}</style>

@@ -1,25 +1,17 @@
 <script setup>
-import {computed,onMounted,ref} from 'vue'; import {api,session} from './api';
-const username=ref('admin'),password=ref('Admin123!Demo'),user=ref(null),rows=ref([]),error=ref(''),busy=ref(false),notice=ref('');
-const count=computed(()=>rows.value.length);
-async function login(){try{busy.value=true;error.value='';const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:username.value,password:password.value})});session.token=r.token;user.value=r.user;await load();}catch(e){error.value=e.message}finally{busy.value=false}}
-async function load(){try{rows.value=await api('/api/products')}catch(e){if(e.message.includes('401'))logout();else error.value=e.message}}
-async function me(){if(!session.token)return;try{user.value=await api('/api/auth/me');await load()}catch{session.token=''}}
-function logout(){session.token='';user.value=null;rows.value=[]}
-async function quick(){try{busy.value=true;notice.value='';await api('/api/orders',{method:'POST',body:JSON.stringify({campaignId:1,quantity:1})});notice.value='操作已提交';await load()}catch(e){error.value=e.message}finally{busy.value=false}}
-onMounted(me);
+import { computed, ref } from 'vue';
+import { ApiError, api, session } from './api';
+const username=ref(''),password=ref(''),user=ref(null),rows=ref([]),campaigns=ref([]),campaignId=ref(null),quantity=ref(1),error=ref(''),notice=ref(''),busy=ref(false);
+const count=computed(()=>rows.value.length); const activeCampaigns=computed(()=>campaigns.value.filter(x=>x.status==='ACTIVE'));
+function logout(message=''){session.token='';user.value=null;rows.value=[];campaigns.value=[];campaignId.value=null;if(message)error.value=message}
+function fail(e){if(e instanceof ApiError&&e.status===401)return logout('会话已失效，请重新登录');error.value=e?.message||'操作失败，请重试'}
+async function load(){try{[rows.value,campaigns.value]=await Promise.all([api('/api/products'),api('/api/campaigns')]);if(!activeCampaigns.value.some(x=>x.id===campaignId.value))campaignId.value=activeCampaigns.value[0]?.id??null}catch(e){fail(e)}}
+async function login(){if(!username.value.trim()||!password.value)return;busy.value=true;error.value='';try{const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username:username.value.trim(),password:password.value})});session.token=r.token;user.value=r.user;password.value='';await load()}catch(e){fail(e)}finally{busy.value=false}}
+async function order(){if(!campaignId.value||quantity.value<1)return;busy.value=true;error.value='';notice.value='';try{await api('/api/orders',{method:'POST',body:JSON.stringify({campaignId:campaignId.value,quantity:Number(quantity.value)})});notice.value='团购订单已提交。';await load()}catch(e){fail(e)}finally{busy.value=false}}
 </script>
-<template>
-  <div class="app-shell">
-    <div class="ticker">今日拼团 · 校园配送 · 明码标价 · 订单可追踪</div>
-    <main class="main">
-      <header class="top"><div><p class="eyebrow">校园团购正在成团</p><h1>Snack Rush</h1></div><div v-if="user" class="account"><span>{{user.displayName}} · {{user.role}}</span><button class="ghost" @click="logout">退出</button></div></header>
-      <section v-if="!user" class="login-card"><div><small>DEMO ACCESS</small><h2>进入Snack Rush</h2><p>管理员：admin / Admin123!Demo<br>普通用户：student / Student123!Demo</p></div><form @submit.prevent="login"><input v-model="username" placeholder="用户名"><input v-model="password" type="password" placeholder="密码"><button :disabled="busy">登录</button></form></section>
-      <template v-else>
-        <section class="hero"><div><span class="kicker">团购商品</span><strong>{{count}}</strong><p>当前数据条目</p></div><div class="hero-copy"><h2>校园零食团购平台</h2><p>后端运行于 :8102，前端开发端口 :5102。当前页面直接读取真实 REST API。</p><button @click="quick" :disabled="busy">参与 1 号团购</button></div></section>
-        <p v-if="notice" class="notice">{{notice}}</p><p v-if="error" class="error">{{error}}</p>
-        <section class="panel"><div class="panel-head"><h3>团购商品</h3><button class="ghost" @click="load">刷新</button></div><div class="cards"><article v-for="row in rows" :key="row.id" class="data-card"><span class="id">#{{row.id}}</span><h4>{{row.name || row.title || row.code || row.isbn || ('记录 '+row.id)}}</h4><p>{{row.description || row.category || row.address || row.author || row.building || row.status || '暂无描述'}}</p><small>{{row.status || row.type || row.role || 'ACTIVE'}}</small></article><div v-if="!rows.length" class="empty">暂无数据</div></div></section>
-      </template>
-    </main>
-  </div>
-</template>
+<template><div class="app-shell"><div class="ticker">今日拼团 · 校园配送 · 明码标价 · 订单可追踪</div><main class="main"><header class="top"><div><p class="eyebrow">校园团购正在成团</p><h1>Snack Rush</h1></div><div v-if="user" class="account"><span>{{user.displayName}} · {{user.role}}</span><button class="ghost" @click="logout()">退出</button></div></header>
+<section v-if="!user" class="login-card"><div><small>SECURE ACCESS</small><h2>进入 Snack Rush</h2><p>使用已授权账号登录；访问令牌仅保存在当前页面内存中。</p></div><form @submit.prevent="login"><label>用户名<input v-model.trim="username" autocomplete="username" maxlength="32" required></label><label>密码<input v-model="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required></label><button :disabled="busy">{{busy?'登录中…':'登录'}}</button></form></section>
+<template v-else><section class="hero"><div><span class="kicker">商品</span><strong>{{count}}</strong><p>当前可见商品</p></div><div class="hero-copy"><h2>校园零食团购平台</h2><p>实时读取商品与团购活动，库存扣减由后端事务和行级锁保护。</p></div></section>
+<section class="action-panel"><div><span class="kicker">GROUP ORDER</span><h3>参与团购</h3><p>选择当前有效活动和购买数量。</p></div><form @submit.prevent="order"><label>团购活动<select v-model.number="campaignId" required><option disabled :value="null">请选择活动</option><option v-for="c in activeCampaigns" :key="c.id" :value="c.id">{{c.title}} · ¥{{c.groupPrice}} · #{{c.id}}</option></select></label><label>数量<input v-model.number="quantity" type="number" min="1" max="100" step="1" required></label><button :disabled="busy||!campaignId">确认下单</button></form></section>
+<p v-if="notice" class="notice" role="status">{{notice}}</p><p v-if="error" class="error" role="alert">{{error}}</p><section class="panel"><div class="panel-head"><h3>团购商品</h3><button class="ghost" :disabled="busy" @click="load">刷新</button></div><div class="cards"><article v-for="row in rows" :key="row.id" class="data-card"><span class="id">#{{row.id}}</span><h4>{{row.name}}</h4><p>{{row.brand||row.category||'校园精选'}}</p><small>{{row.status}} · 库存 {{row.stock}}</small></article><div v-if="!rows.length" class="empty">暂无可见商品</div></div></section></template></main></div></template>
+<style scoped>.action-panel{display:grid;grid-template-columns:minmax(220px,.65fr) minmax(300px,1.35fr);gap:28px;margin:0 0 28px;padding:28px;border-radius:22px;background:#fff;border:2px solid #111}.action-panel h3{margin:.35rem 0}.action-panel label,.login-card label{display:grid;gap:7px;font-size:.86rem;font-weight:800}.action-panel select{padding:13px 15px;border:2px solid #111;border-radius:10px;background:#fff;font:inherit}.action-panel button:disabled,.login-card button:disabled{opacity:.55;cursor:not-allowed}@media(max-width:760px){.action-panel{grid-template-columns:1fr}}</style>
