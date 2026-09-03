@@ -1,2 +1,3 @@
-Production validation trigger for the concurrency-hardening candidate.
-The validation target includes pessimistic locking for stock and borrowing flows, a Flyway V2 borrowing lookup index, lock-policy regression tests, and removal of Spring Boot's generated default user surface.
+Production validation trigger for the production frontend candidate.
+Target lineage includes the fully green backend candidate 07914ed78cff45494ba15fca8a129ff7ec606794 plus production frontend interactions, structured API errors/timeouts, committed lockfiles, pinned Actions, anti-demo policy invariants, pessimistic locking, Flyway migrations, and non-root container validation.
+This file exists only to force a native push event after moving the disposable branch with the Git Data API.
