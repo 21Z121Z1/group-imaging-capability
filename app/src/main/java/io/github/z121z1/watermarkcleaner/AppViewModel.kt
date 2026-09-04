@@ -1,10 +1,12 @@
 package io.github.z121z1.watermarkcleaner
 
 import android.app.Application
+import android.content.res.Configuration
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.z121z1.watermarkcleaner.core.CalibrationEngine
+import io.github.z121z1.watermarkcleaner.core.CalibrationOrientation
 import io.github.z121z1.watermarkcleaner.core.CalibrationTarget
 import io.github.z121z1.watermarkcleaner.core.DynamicRange
 import io.github.z121z1.watermarkcleaner.core.GainMapCalibrationEngine
@@ -117,6 +119,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Existing MD3 screen has one SDR and one HDR entry. The current window orientation selects
+     * the independent portrait/landscape slot, so rotating the app before starting calibration is
+     * enough to create the other model without importing the later ColorOS UI implementation. */
+    fun startCalibration(hdr: Boolean) {
+        val orientation = if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            CalibrationOrientation.LANDSCAPE
+        } else {
+            CalibrationOrientation.PORTRAIT
+        }
+        startCalibration(CalibrationTarget(orientation, if (hdr) DynamicRange.HDR else DynamicRange.SDR))
+    }
+
     fun startCalibration(target: CalibrationTarget) {
         _state.value = _state.value.copy(calibration = CalibrationState(active = true, target = target))
     }
@@ -172,8 +186,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     null
                 }
                 withContext(Dispatchers.IO) {
-                    // For HDR, publish the gain profile first and the base profile last. The base profile is the
-                    // readiness marker, so an interrupted write can never expose a half-complete HDR bundle.
                     if (gainProfile != null) profiles.saveHdrGain(gainProfile)
                     profiles.saveBase(target.dynamicRange, baseProfile)
                 }
