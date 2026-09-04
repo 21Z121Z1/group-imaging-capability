@@ -2,6 +2,7 @@ package io.github.z121z1.watermarkcleaner
 
 import android.app.Application
 import android.content.res.Configuration
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -105,7 +106,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val message = when (result.gainMapMode) {
                         GainMapMode.CALIBRATED -> "HDR 已保留 · gain map 使用独立校准模型"
                         GainMapMode.LOCAL_FALLBACK -> "HDR 已保留 · gain map 使用局部回退"
-                        GainMapMode.NONE -> if (result.wasHdr) "HDR 已保留" else "已保存"
+                        GainMapMode.NONE -> if (result.wasHdr) "HDR / P3 截图链路已保留" else "已保存"
                     }
                     updateQueue(target.uri) {
                         it.copy(status = QueueStatus.DONE, output = output, hdr = result.wasHdr, message = message)
@@ -119,16 +120,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Existing MD3 screen has one SDR and one HDR entry. The current window orientation selects
-     * the independent portrait/landscape slot, so rotating the app before starting calibration is
-     * enough to create the other model without importing the later ColorOS UI implementation. */
+    /**
+     * The original MD3 screen exposes one button per dynamic range. Prefer the current orientation,
+     * but once that slot is calibrated automatically select the still-missing orientation. This
+     * makes the second run enter the independent landscape profile even when auto-rotate is locked.
+     */
     fun startCalibration(hdr: Boolean) {
-        val orientation = if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        val range = if (hdr) DynamicRange.HDR else DynamicRange.SDR
+        val preferred = if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             CalibrationOrientation.LANDSCAPE
         } else {
             CalibrationOrientation.PORTRAIT
         }
-        startCalibration(CalibrationTarget(orientation, if (hdr) DynamicRange.HDR else DynamicRange.SDR))
+        val calibrated = profiles.calibratedTargets()
+        val preferredTarget = CalibrationTarget(preferred, range)
+        val otherOrientation = if (preferred == CalibrationOrientation.PORTRAIT) {
+            CalibrationOrientation.LANDSCAPE
+        } else {
+            CalibrationOrientation.PORTRAIT
+        }
+        val otherTarget = CalibrationTarget(otherOrientation, range)
+        val target = when {
+            preferredTarget !in calibrated -> preferredTarget
+            otherTarget !in calibrated -> otherTarget
+            else -> preferredTarget
+        }
+        startCalibration(target)
     }
 
     fun startCalibration(target: CalibrationTarget) {
@@ -169,7 +186,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(
             calibration = snapshot.copy(
                 fitting = true,
-                message = if (target.dynamicRange == DynamicRange.HDR) "正在拟合 SDR base 与 HDR gain map 两套模型…" else "正在拟合逐像素模型…",
+                message = if (target.dynamicRange == DynamicRange.HDR) {
+                    "正在拟合 HDR / P3 截图主图模型；若截图容器自身带 gain map，再额外拟合增益图…"
+                } else {
+                    "正在拟合逐像素模型…"
+                },
             ),
         )
         viewModelScope.launch {
@@ -178,24 +199,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 require(target.orientation.matches(baseProfile.width, baseProfile.height)) {
                     "截图方向与 ${target.orientation.label} 校准目标不一致：${baseProfile.width}×${baseProfile.height}"
                 }
-                val gainProfile = if (target.dynamicRange == DynamicRange.HDR) {
+
+                val hasGainMap = target.dynamicRange == DynamicRange.HDR && sampleHasGainMap(snapshot.samples.first())
+                val gainProfile = if (hasGainMap) {
                     gainMapCalibrationEngine.fit(snapshot.samples).also {
                         require(it.baseWidth == baseProfile.width && it.baseHeight == baseProfile.height)
                     }
                 } else {
                     null
                 }
+
                 withContext(Dispatchers.IO) {
-                    if (gainProfile != null) profiles.saveHdrGain(gainProfile)
+                    if (target.dynamicRange == DynamicRange.HDR) {
+                        if (gainProfile != null) profiles.saveHdrGain(gainProfile)
+                        else profiles.deleteHdrGain(baseProfile.width, baseProfile.height)
+                    }
                     profiles.saveBase(target.dynamicRange, baseProfile)
                 }
-                val gainSummary = gainProfile?.let { "，gain map ${it.pixels.size} 个验证像素" }.orEmpty()
+                val gainSummary = when {
+                    gainProfile != null -> "，gain map ${gainProfile.pixels.size} 个验证像素"
+                    target.dynamicRange == DynamicRange.HDR -> "，ColorOS 截图为扁平 HDR/P3（文件无 gain map）"
+                    else -> ""
+                }
                 _state.value = _state.value.copy(
                     modelReady = true,
                     calibratedTargets = profiles.calibratedTargets(),
                     calibration = CalibrationState(
                         active = false,
-                        message = "${target.label} 校准完成：${baseProfile.width}×${baseProfile.height}，base ${baseProfile.pixels.size} 个稳定水印像素$gainSummary",
+                        message = "${target.label} 校准完成：${baseProfile.width}×${baseProfile.height}，base ${baseProfile.pixels.size} 个稳定水印像素$gainSummary。再次点同类型校准会优先进入尚未完成的另一个方向。",
                     ),
                 )
             } catch (t: Throwable) {
@@ -203,6 +234,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     calibration = snapshot.copy(fitting = false, message = t.message ?: "校准失败"),
                 )
             }
+        }
+    }
+
+    private suspend fun sampleHasGainMap(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input)
+        } ?: return@withContext false
+        try {
+            bitmap.gainmap != null
+        } finally {
+            bitmap.recycle()
         }
     }
 
