@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Gainmap
 import android.net.Uri
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,7 +23,6 @@ class WatermarkProcessor(
 ) {
     suspend fun process(uri: Uri, cleanHdrFallback: Boolean = true): ProcessedImage =
         withContext(Dispatchers.Default) {
-            val primary = profiles.loadPrimary() ?: error("请先完成水印校准")
             val decoded = resolver.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(
                     input,
@@ -32,32 +32,38 @@ class WatermarkProcessor(
             } ?: error("无法解码图片")
 
             try {
-                require(decoded.width == primary.width && decoded.height == primary.height) {
-                    "当前模型为 ${primary.width}×${primary.height}，输入为 ${decoded.width}×${decoded.height}；请重新校准此截图尺寸"
-                }
+                val originalGainmap = decoded.gainmap
+                val range = if (originalGainmap != null) DynamicRange.HDR else DynamicRange.SDR
+                val orientation = CalibrationOrientation.fromDimensions(decoded.width, decoded.height)
+                val primary = profiles.loadBase(decoded.width, decoded.height, range)
+                    ?: error("缺少 ${orientation.label} ${range.label} 的 ${decoded.width}×${decoded.height} 校准模型；请先单独校准")
+
                 val output = decoded.copy(Bitmap.Config.ARGB_8888, true)
                     ?: error("无法创建可编辑位图")
                 BitmapProfileApplier.apply(output, primary)
 
-                val originalGainmap = decoded.gainmap
                 var gainMapMode = GainMapMode.NONE
                 if (originalGainmap != null) {
+                    require(GainMapBitmapIO.isSdrToHdr(originalGainmap)) { "HDR_TO_SDR gain map 暂不支持精确去水印" }
                     val oldContents = originalGainmap.gainmapContents
-                    val newContents = oldContents.copy(Bitmap.Config.ARGB_8888, true)
+                    val targetConfig = oldContents.config ?: Bitmap.Config.ARGB_8888
+                    val newContents = oldContents.copy(targetConfig, true)
                         ?: error("无法创建可编辑 HDR gain map")
-                    val gainProfile = profiles.loadGain()
-                    if (gainProfile != null &&
-                        gainProfile.width == newContents.width && gainProfile.height == newContents.height
-                    ) {
-                        BitmapProfileApplier.apply(newContents, gainProfile)
+                    val gainProfile = profiles.loadHdrGain(decoded.width, decoded.height)
+                    if (gainProfile != null) {
+                        require(gainProfile.width == newContents.width && gainProfile.height == newContents.height) {
+                            "HDR gain map 尺寸已变化；请重新校准 ${orientation.label} HDR"
+                        }
+                        require(gainProfile.layout == GainMapBitmapIO.read(newContents).layout) {
+                            "HDR gain map 通道布局已变化；请重新校准 ${orientation.label} HDR"
+                        }
+                        GainMapProfileApplier.apply(newContents, originalGainmap, gainProfile)
                         gainMapMode = GainMapMode.CALIBRATED
                     } else if (cleanHdrFallback) {
                         GainMapMaskCleaner.clean(newContents, primary)
                         gainMapMode = GainMapMode.LOCAL_FALLBACK
                     }
-                    // API 35+ copy constructor keeps every gain-map metadata field intact while replacing contents.
-                    // minSdk is 34, so use the public metadata-preserving mutation on API 34.
-                    val replacement = if (android.os.Build.VERSION.SDK_INT >= 35) {
+                    val replacement = if (Build.VERSION.SDK_INT >= 35) {
                         Gainmap(originalGainmap, newContents)
                     } else {
                         originalGainmap.apply { setGainmapContents(newContents) }
