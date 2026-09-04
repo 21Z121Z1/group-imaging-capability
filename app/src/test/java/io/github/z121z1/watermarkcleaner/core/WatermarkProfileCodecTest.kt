@@ -15,7 +15,7 @@ class WatermarkProfileCodecTest {
             CompositePixel(1, BlendSpace.ENCODED_SRGB, .94f, .95f, .96f, .02f, .018f, .016f, .40f),
             CompositePixel(7, BlendSpace.LINEAR_SRGB, .90f, .91f, .92f, .03f, .028f, .026f, .60f),
         ),
-        calibrationLevels = 8,
+        calibrationLevels = 6,
         calibrationRmse = .24f,
         validationMaxError = .60f,
     )
