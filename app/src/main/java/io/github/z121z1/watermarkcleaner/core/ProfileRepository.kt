@@ -30,8 +30,8 @@ class ProfileRepository(context: Context) {
         legacyGainFile.delete()
     }
 
-    fun hasPrimary(): Boolean = primaryFile.isFile && readOrNull(primaryFile) != null
-    fun hasGain(): Boolean = gainFile.isFile && readOrNull(gainFile) != null
+    fun hasPrimary(): Boolean = primaryFile.isFile
+    fun hasGain(): Boolean = gainFile.isFile
 
     private fun readOrNull(file: File): WatermarkProfile? {
         if (!file.isFile) return null
