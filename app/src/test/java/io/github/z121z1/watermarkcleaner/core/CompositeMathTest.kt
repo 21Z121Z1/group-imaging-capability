@@ -1,5 +1,6 @@
 package io.github.z121z1.watermarkcleaner.core
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -12,89 +13,100 @@ class CompositeMathTest {
     private val baseline = intArrayOf(0, 32, 64, 128, 192, 255)
 
     @Test
-    fun encodedSourceOver_recoversAospDefaultShadowTextAndOverlap() {
-        // AOSP Watermark defaults: text=0x60ffffff, shadow=0xb0000000.
-        val shadowAlpha = 0xb0 / 255f
-        val textAlpha = 0x60 / 255f
-
-        val blackShadow = encodedComposite(baseline, alpha = shadowAlpha, overlay = 0f)
-        val shadowFit = fitEncoded(blackShadow)
-        assertTrue(CompositeMath.isPhysicalSourceOver(shadowFit))
-        assertTrue(shadowFit.validationMaxError <= 1f)
-
-        val whiteText = encodedComposite(baseline, alpha = textAlpha, overlay = 255f)
-        val textFit = fitEncoded(whiteText)
-        assertTrue(CompositeMath.isPhysicalSourceOver(textFit))
-        assertTrue(textFit.validationMaxError <= 1f)
-
-        // A fixed shadow followed by fixed text is still exactly representable as one source-over
-        // composite per pixel. This covers the glyph/shadow overlap region, not only their edges.
-        val overlap = encodedComposite(
-            encodedComposite(baseline, alpha = shadowAlpha, overlay = 0f),
-            alpha = textAlpha,
-            overlay = 255f,
-        )
-        val overlapFit = fitEncoded(overlap)
-        assertTrue(CompositeMath.isPhysicalSourceOver(overlapFit))
-        assertTrue(overlapFit.validationMaxError <= 1f)
+    fun oplusEncodedSurface_allRasterizedAlphaBytesPassExactValidator() {
+        // WatermarkExtImpl sets textColor=0x0FB8B8B8 and shadowRadius=0. Glyph AA can only
+        // lower the effective alpha. Include premultiplied-surface quantization before screenshot.
+        for (alphaByte in 1..CompositeMath.OPLUS_BETA_TEXT_ALPHA_BYTE) {
+            val observed = premultipliedOplusSurface(baseline, alphaByte)
+            val fit = fitNeutral(observed, BlendSpace.ENCODED_SRGB)
+            assertTrue("alphaByte=$alphaByte fit=$fit", CompositeMath.isOplusBetaWatermark(fit))
+            assertTrue("alphaByte=$alphaByte fit=$fit", fit.trainingRmse <= .55f)
+            assertTrue("alphaByte=$alphaByte fit=$fit", fit.validationMaxError <= 1.10f)
+        }
     }
 
     @Test
-    fun inversion_isWithinOneCodeValueForQuantizedSourceOver() {
-        val observations = encodedComposite(baseline, alpha = .24f, overlay = 0f)
-        val fit = fitEncoded(observations)
+    fun oplusValidator_rejectsWhiteUiEdgeAndTooOpaqueGrayOverlay() {
+        val whiteUi = encodedComposite(baseline, alpha = .04f, overlay = 255f)
+        assertFalse(CompositeMath.isOplusBetaWatermark(fitNeutral(whiteUi, BlendSpace.ENCODED_SRGB)))
+
+        val tooOpaqueGray = encodedComposite(
+            baseline,
+            alpha = .15f,
+            overlay = CompositeMath.OPLUS_BETA_TEXT_CODE.toFloat(),
+        )
+        assertFalse(CompositeMath.isOplusBetaWatermark(fitNeutral(tooOpaqueGray, BlendSpace.ENCODED_SRGB)))
+    }
+
+    @Test
+    fun inversion_isWithinOneCodeValueForQuantizedOplusSurface() {
+        val observations = premultipliedOplusSurface(baseline, CompositeMath.OPLUS_BETA_TEXT_ALPHA_BYTE)
+        val fit = fitNeutral(observations, BlendSpace.ENCODED_SRGB)
+        val alpha = CompositeMath.OPLUS_BETA_TEXT_ALPHA
+        val premultiplied = (
+            CompositeMath.OPLUS_BETA_TEXT_ALPHA_BYTE * CompositeMath.OPLUS_BETA_TEXT_CODE / 255f
+        ).roundToInt()
+
         for (input in 0..255) {
-            val observed = ((1f - .24f) * input).roundToInt().coerceIn(0, 255)
+            val observed = (premultiplied + input * (1f - alpha)).roundToInt().coerceIn(0, 255)
             val restored = CompositeMath.invert(observed, fit.slopeR, fit.interceptR, fit.blendSpace)
             assertTrue("input=$input observed=$observed restored=$restored", abs(restored - input) <= 1)
         }
     }
 
     @Test
-    fun linearSourceOver_isDetectedByIndependentHoldoutLevels() {
-        val observed = linearComposite(baseline, alpha = .18, overlayLinear = 1.0)
-        val encodedFit = CompositeMath.fit(
-            baseline, baseline, baseline,
-            observed, observed, observed,
-            training, validation, BlendSpace.ENCODED_SRGB,
-        )!!
-        val linearFit = CompositeMath.fit(
-            baseline, baseline, baseline,
-            observed, observed, observed,
-            training, validation, BlendSpace.LINEAR_SRGB,
-        )!!
-        assertTrue(CompositeMath.isPhysicalSourceOver(linearFit))
-        assertTrue(linearFit.validationMaxError <= 1f)
+    fun linearOplusSourceOver_isDetectedByIndependentHoldoutLevels() {
+        val observed = linearComposite(
+            baseline,
+            alpha = CompositeMath.OPLUS_BETA_TEXT_ALPHA.toDouble(),
+            overlayCode = CompositeMath.OPLUS_BETA_TEXT_CODE,
+        )
+        val encodedFit = fitNeutral(observed, BlendSpace.ENCODED_SRGB)
+        val linearFit = fitNeutral(observed, BlendSpace.LINEAR_SRGB)
+        assertTrue(CompositeMath.isOplusBetaWatermark(linearFit))
+        assertTrue(linearFit.validationMaxError <= 1.10f)
         assertTrue(linearFit.validationMaxError < encodedFit.validationMaxError)
     }
 
     @Test
     fun fitUsesObservedScreenshotBaseline_notNominalRequestedGray() {
         val shiftedBaseline = intArrayOf(1, 31, 63, 127, 191, 253)
-        val observed = encodedComposite(shiftedBaseline, alpha = .11f, overlay = 255f)
-        val fit = CompositeMath.fit(
+        val observed = encodedComposite(
+            shiftedBaseline,
+            alpha = .04f,
+            overlay = CompositeMath.OPLUS_BETA_TEXT_CODE.toFloat(),
+        )
+        val fit = CompositeMath.fitNeutralOverlay(
             shiftedBaseline, shiftedBaseline, shiftedBaseline,
             observed, observed, observed,
             training, validation, BlendSpace.ENCODED_SRGB,
         )!!
-        assertTrue(CompositeMath.isPhysicalSourceOver(fit))
-        assertTrue(fit.validationMaxError <= 1f)
+        assertTrue(CompositeMath.isOplusBetaWatermark(fit))
+        assertTrue(fit.validationMaxError <= 1.10f)
     }
 
-    private fun fitEncoded(observed: IntArray): CompositeFit = CompositeMath.fit(
+    private fun fitNeutral(observed: IntArray, space: BlendSpace): CompositeFit = CompositeMath.fitNeutralOverlay(
         baseline, baseline, baseline,
         observed, observed, observed,
-        training, validation, BlendSpace.ENCODED_SRGB,
+        training, validation, space,
     )!!
+
+    private fun premultipliedOplusSurface(input: IntArray, alphaByte: Int): IntArray {
+        val alpha = alphaByte / 255f
+        val premultiplied = (alphaByte * CompositeMath.OPLUS_BETA_TEXT_CODE / 255f).roundToInt()
+        return IntArray(input.size) { index ->
+            (premultiplied + input[index] * (1f - alpha)).roundToInt().coerceIn(0, 255)
+        }
+    }
 
     private fun encodedComposite(input: IntArray, alpha: Float, overlay: Float): IntArray =
         IntArray(input.size) { index ->
             ((1f - alpha) * input[index] + alpha * overlay).roundToInt().coerceIn(0, 255)
         }
 
-    private fun linearComposite(input: IntArray, alpha: Double, overlayLinear: Double): IntArray =
+    private fun linearComposite(input: IntArray, alpha: Double, overlayCode: Int): IntArray =
         IntArray(input.size) { index ->
-            val out = (1.0 - alpha) * srgbToLinear(input[index]) + alpha * overlayLinear
+            val out = (1.0 - alpha) * srgbToLinear(input[index]) + alpha * srgbToLinear(overlayCode)
             linearToSrgb(out)
         }
 
