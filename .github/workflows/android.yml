@@ -25,8 +25,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - name: Install Android 37 platform
-        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37" "platform-tools"
+      - name: Install Android 17 platform
+        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-CinnamonBun" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
@@ -53,8 +53,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - name: Install Android build platform
-        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37" "platform-tools"
+      - name: Install Android 17 build platform
+        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-CinnamonBun" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
