@@ -6,6 +6,7 @@ import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import kotlin.io.path.createTempDirectory
 
 class WatermarkProfileCodecTest {
     private val profile = WatermarkProfile(
@@ -52,7 +53,7 @@ class WatermarkProfileCodecTest {
 
     @Test
     fun atomicWrite_publishesOnlyValidatedProfile() {
-        val dir = createTempDir(prefix = "wmr3-")
+        val dir = createTempDirectory("wmr3-").toFile()
         try {
             val file = File(dir, "primary.wmr3")
             WatermarkProfileCodec.writeAtomically(profile, file)
