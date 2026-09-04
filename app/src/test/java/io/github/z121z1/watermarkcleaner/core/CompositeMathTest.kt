@@ -7,9 +7,9 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 class CompositeMathTest {
-    private val training = intArrayOf(0, 1, 2, 4, 6, 7)
-    private val validation = intArrayOf(3, 5)
-    private val baseline = intArrayOf(0, 32, 64, 96, 128, 160, 192, 255)
+    private val training = intArrayOf(0, 1, 3, 5)
+    private val validation = intArrayOf(2, 4)
+    private val baseline = intArrayOf(0, 32, 64, 128, 192, 255)
 
     @Test
     fun encodedSourceOver_recoversBlackShadowAndWhiteText() {
@@ -67,7 +67,7 @@ class CompositeMathTest {
 
     @Test
     fun fitUsesObservedScreenshotBaseline_notNominalRequestedGray() {
-        val shiftedBaseline = intArrayOf(1, 31, 63, 95, 127, 159, 191, 253)
+        val shiftedBaseline = intArrayOf(1, 31, 63, 127, 191, 253)
         val observed = encodedComposite(shiftedBaseline, alpha = .11f, overlay = 255f)
         val fit = CompositeMath.fit(
             shiftedBaseline, shiftedBaseline, shiftedBaseline,
