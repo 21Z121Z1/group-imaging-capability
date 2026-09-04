@@ -31,10 +31,22 @@ data class CompositeFit(
 )
 
 object CompositeMath {
+    // OPlus WatermarkExtImpl sets the actual beta-watermark paint to ARGB 0x0FB8B8B8 and
+    // shadowRadius to zero. Glyph antialiasing can only reduce this paint alpha.
+    const val OPLUS_BETA_TEXT_CODE = 0xB8
+    const val OPLUS_BETA_TEXT_ALPHA_BYTE = 0x0F
+    const val OPLUS_BETA_TEXT_ALPHA = OPLUS_BETA_TEXT_ALPHA_BYTE / 255f
+
     private const val MIN_SLOPE = 0.02f
     private const val MAX_SLOPE = 1.003f
     private const val MAX_SLOPE_SPREAD = 0.035f
     private const val PREMULTIPLIED_TOLERANCE = 0.012f
+
+    private const val OPLUS_MAX_EFFECTIVE_ALPHA = 0.065f
+    private const val OPLUS_MAX_SLOPE_SPREAD = 0.010f
+    private const val OPLUS_MAX_INTERCEPT_SPREAD = 1.5f / 255f
+    private const val OPLUS_ENCODED_SOURCE_TOLERANCE = 1.5f / 255f
+    private const val OPLUS_LINEAR_SOURCE_TOLERANCE = 0.006f
 
     fun fit(
         backgroundR: IntArray,
@@ -47,51 +59,54 @@ object CompositeMath {
         validationIndices: IntArray,
         blendSpace: BlendSpace,
     ): CompositeFit? {
-        val sampleCount = backgroundR.size
-        require(sampleCount >= 4)
-        require(backgroundG.size == sampleCount && backgroundB.size == sampleCount)
-        require(observedR.size == sampleCount && observedG.size == sampleCount && observedB.size == sampleCount)
-        require(trainingIndices.size >= 2 && validationIndices.isNotEmpty())
-        require(trainingIndices.all { it in 0 until sampleCount })
-        require(validationIndices.all { it in 0 until sampleCount })
+        validateInputs(
+            backgroundR, backgroundG, backgroundB,
+            observedR, observedG, observedB,
+            trainingIndices, validationIndices,
+        )
 
         val r = fitChannel(backgroundR, observedR, trainingIndices, blendSpace) ?: return null
         val g = fitChannel(backgroundG, observedG, trainingIndices, blendSpace) ?: return null
         val b = fitChannel(backgroundB, observedB, trainingIndices, blendSpace) ?: return null
+        return evaluateFit(
+            backgroundR, backgroundG, backgroundB,
+            observedR, observedG, observedB,
+            trainingIndices, validationIndices,
+            blendSpace,
+            r.slope, g.slope, b.slope,
+            r.intercept, g.intercept, b.intercept,
+        )
+    }
 
-        var trainingSquaredError = 0.0
-        var validationMaxError = 0.0
-        for (index in trainingIndices) {
-            val er = predictCode(backgroundR[index], r.slope, r.intercept, blendSpace) - observedR[index]
-            val eg = predictCode(backgroundG[index], g.slope, g.intercept, blendSpace) - observedG[index]
-            val eb = predictCode(backgroundB[index], b.slope, b.intercept, blendSpace) - observedB[index]
-            trainingSquaredError += er * er + eg * eg + eb * eb
-        }
-        for (index in validationIndices) {
-            validationMaxError = max(
-                validationMaxError,
-                abs(predictCode(backgroundR[index], r.slope, r.intercept, blendSpace) - observedR[index]).toDouble(),
-            )
-            validationMaxError = max(
-                validationMaxError,
-                abs(predictCode(backgroundG[index], g.slope, g.intercept, blendSpace) - observedG[index]).toDouble(),
-            )
-            validationMaxError = max(
-                validationMaxError,
-                abs(predictCode(backgroundB[index], b.slope, b.intercept, blendSpace) - observedB[index]).toDouble(),
-            )
-        }
-        val trainingRmse = sqrt(trainingSquaredError / (trainingIndices.size * 3.0)).toFloat()
-        return CompositeFit(
-            blendSpace = blendSpace,
-            slopeR = r.slope,
-            slopeG = g.slope,
-            slopeB = b.slope,
-            interceptR = r.intercept,
-            interceptG = g.intercept,
-            interceptB = b.intercept,
-            trainingRmse = trainingRmse,
-            validationMaxError = validationMaxError.toFloat(),
+    fun fitNeutralOverlay(
+        backgroundR: IntArray,
+        backgroundG: IntArray,
+        backgroundB: IntArray,
+        observedR: IntArray,
+        observedG: IntArray,
+        observedB: IntArray,
+        trainingIndices: IntArray,
+        validationIndices: IntArray,
+        blendSpace: BlendSpace,
+    ): CompositeFit? {
+        validateInputs(
+            backgroundR, backgroundG, backgroundB,
+            observedR, observedG, observedB,
+            trainingIndices, validationIndices,
+        )
+        val shared = fitSharedNeutral(
+            arrayOf(backgroundR, backgroundG, backgroundB),
+            arrayOf(observedR, observedG, observedB),
+            trainingIndices,
+            blendSpace,
+        ) ?: return null
+        return evaluateFit(
+            backgroundR, backgroundG, backgroundB,
+            observedR, observedG, observedB,
+            trainingIndices, validationIndices,
+            blendSpace,
+            shared.slope, shared.slope, shared.slope,
+            shared.intercept, shared.intercept, shared.intercept,
         )
     }
 
@@ -103,6 +118,31 @@ object CompositeMath {
         return channelIsPhysical(fit.slopeR, fit.interceptR) &&
             channelIsPhysical(fit.slopeG, fit.interceptG) &&
             channelIsPhysical(fit.slopeB, fit.interceptB)
+    }
+
+    fun isOplusBetaWatermark(fit: CompositeFit): Boolean {
+        if (!isPhysicalSourceOver(fit)) return false
+
+        val minSlope = min(fit.slopeR, min(fit.slopeG, fit.slopeB))
+        val maxSlope = max(fit.slopeR, max(fit.slopeG, fit.slopeB))
+        if (maxSlope - minSlope > OPLUS_MAX_SLOPE_SPREAD) return false
+
+        val meanSlope = (fit.slopeR + fit.slopeG + fit.slopeB) / 3f
+        val alpha = 1f - meanSlope
+        if (!alpha.isFinite() || alpha <= 0f || alpha > OPLUS_MAX_EFFECTIVE_ALPHA) return false
+
+        val minIntercept = min(fit.interceptR, min(fit.interceptG, fit.interceptB))
+        val maxIntercept = max(fit.interceptR, max(fit.interceptG, fit.interceptB))
+        if (!minIntercept.isFinite() || !maxIntercept.isFinite()) return false
+        if (maxIntercept - minIntercept > OPLUS_MAX_INTERCEPT_SPREAD) return false
+
+        val meanIntercept = (fit.interceptR + fit.interceptG + fit.interceptB) / 3f
+        val expectedPremultiplied = alpha * toDomain(OPLUS_BETA_TEXT_CODE, fit.blendSpace)
+        val tolerance = when (fit.blendSpace) {
+            BlendSpace.ENCODED_SRGB -> OPLUS_ENCODED_SOURCE_TOLERANCE
+            BlendSpace.LINEAR_SRGB -> OPLUS_LINEAR_SOURCE_TOLERANCE
+        }
+        return abs(meanIntercept - expectedPremultiplied) <= tolerance
     }
 
     fun predictCode(input: Int, slope: Float, intercept: Float, blendSpace: BlendSpace): Float {
@@ -133,13 +173,83 @@ object CompositeMath {
         return best
     }
 
+    private fun validateInputs(
+        backgroundR: IntArray,
+        backgroundG: IntArray,
+        backgroundB: IntArray,
+        observedR: IntArray,
+        observedG: IntArray,
+        observedB: IntArray,
+        trainingIndices: IntArray,
+        validationIndices: IntArray,
+    ) {
+        val sampleCount = backgroundR.size
+        require(sampleCount >= 4)
+        require(backgroundG.size == sampleCount && backgroundB.size == sampleCount)
+        require(observedR.size == sampleCount && observedG.size == sampleCount && observedB.size == sampleCount)
+        require(trainingIndices.size >= 2 && validationIndices.isNotEmpty())
+        require(trainingIndices.all { it in 0 until sampleCount })
+        require(validationIndices.all { it in 0 until sampleCount })
+    }
+
+    private fun evaluateFit(
+        backgroundR: IntArray,
+        backgroundG: IntArray,
+        backgroundB: IntArray,
+        observedR: IntArray,
+        observedG: IntArray,
+        observedB: IntArray,
+        trainingIndices: IntArray,
+        validationIndices: IntArray,
+        blendSpace: BlendSpace,
+        slopeR: Float,
+        slopeG: Float,
+        slopeB: Float,
+        interceptR: Float,
+        interceptG: Float,
+        interceptB: Float,
+    ): CompositeFit {
+        var trainingSquaredError = 0.0
+        var validationMaxError = 0.0
+        for (index in trainingIndices) {
+            val er = predictCode(backgroundR[index], slopeR, interceptR, blendSpace) - observedR[index]
+            val eg = predictCode(backgroundG[index], slopeG, interceptG, blendSpace) - observedG[index]
+            val eb = predictCode(backgroundB[index], slopeB, interceptB, blendSpace) - observedB[index]
+            trainingSquaredError += er * er + eg * eg + eb * eb
+        }
+        for (index in validationIndices) {
+            validationMaxError = max(
+                validationMaxError,
+                abs(predictCode(backgroundR[index], slopeR, interceptR, blendSpace) - observedR[index]).toDouble(),
+            )
+            validationMaxError = max(
+                validationMaxError,
+                abs(predictCode(backgroundG[index], slopeG, interceptG, blendSpace) - observedG[index]).toDouble(),
+            )
+            validationMaxError = max(
+                validationMaxError,
+                abs(predictCode(backgroundB[index], slopeB, interceptB, blendSpace) - observedB[index]).toDouble(),
+            )
+        }
+        return CompositeFit(
+            blendSpace = blendSpace,
+            slopeR = slopeR,
+            slopeG = slopeG,
+            slopeB = slopeB,
+            interceptR = interceptR,
+            interceptG = interceptG,
+            interceptB = interceptB,
+            trainingRmse = sqrt(trainingSquaredError / (trainingIndices.size * 3.0)).toFloat(),
+            validationMaxError = validationMaxError.toFloat(),
+        )
+    }
+
     private fun fitChannel(
         background: IntArray,
         observed: IntArray,
         trainingIndices: IntArray,
         blendSpace: BlendSpace,
     ): ChannelFit? {
-        val n = trainingIndices.size.toDouble()
         var sx = 0.0
         var sy = 0.0
         var sxx = 0.0
@@ -152,6 +262,35 @@ object CompositeMath {
             sxx += x * x
             sxy += x * y
         }
+        return solveLine(trainingIndices.size.toDouble(), sx, sy, sxx, sxy)
+    }
+
+    private fun fitSharedNeutral(
+        backgrounds: Array<IntArray>,
+        observed: Array<IntArray>,
+        trainingIndices: IntArray,
+        blendSpace: BlendSpace,
+    ): ChannelFit? {
+        var sx = 0.0
+        var sy = 0.0
+        var sxx = 0.0
+        var sxy = 0.0
+        var n = 0.0
+        for (channel in 0..2) {
+            for (index in trainingIndices) {
+                val x = toDomain(backgrounds[channel][index], blendSpace).toDouble()
+                val y = toDomain(observed[channel][index], blendSpace).toDouble()
+                sx += x
+                sy += y
+                sxx += x * x
+                sxy += x * y
+                n += 1.0
+            }
+        }
+        return solveLine(n, sx, sy, sxx, sxy)
+    }
+
+    private fun solveLine(n: Double, sx: Double, sy: Double, sxx: Double, sxy: Double): ChannelFit? {
         val denominator = n * sxx - sx * sx
         if (abs(denominator) <= 1e-12) return null
         val slope = (n * sxy - sx * sy) / denominator
