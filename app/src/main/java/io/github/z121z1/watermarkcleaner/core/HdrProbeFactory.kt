@@ -13,7 +13,7 @@ object HdrProbeFactory {
         height: Int,
         baseLevel: Int,
         pattern: HdrProbePattern,
-        gainLevel: Int = 192,
+        gainLevel: Int = defaultGainLevel(baseLevel),
     ): Bitmap {
         require(width > 0 && height > 0)
         require(baseLevel in 0..255 && gainLevel in 0..255)
@@ -49,5 +49,14 @@ object HdrProbeFactory {
         }
         base.gainmap = gainmap
         return base
+    }
+
+    private fun defaultGainLevel(baseLevel: Int): Int = when (baseLevel) {
+        in 0..15 -> 32
+        in 16..47 -> 64
+        in 48..95 -> 96
+        in 96..159 -> 144
+        in 160..223 -> 192
+        else -> 240
     }
 }
