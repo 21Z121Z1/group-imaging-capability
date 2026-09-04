@@ -27,85 +27,81 @@ class GainMapCalibrationEngine(private val resolver: ContentResolver) {
     suspend fun fit(samples: List<Uri>): GainMapProfile = withContext(Dispatchers.Default) {
         require(samples.size == CalibrationEngine.LEVELS.size)
         val decoded = samples.map(::decodeSample)
-        try {
-            val first = decoded.first()
-            require(decoded.all { it.baseWidth == first.baseWidth && it.baseHeight == first.baseHeight }) { "HDR 校准截图尺寸不一致" }
-            require(decoded.all { it.channels.width == first.channels.width && it.channels.height == first.channels.height }) { "HDR 校准 gain map 尺寸不一致" }
-            require(decoded.all { it.channels.layout == first.channels.layout }) { "HDR 校准 gain map 通道布局发生变化" }
+        val first = decoded.first()
+        require(decoded.all { it.baseWidth == first.baseWidth && it.baseHeight == first.baseHeight }) { "HDR 校准截图尺寸不一致" }
+        require(decoded.all { it.channels.width == first.channels.width && it.channels.height == first.channels.height }) { "HDR 校准 gain map 尺寸不一致" }
+        require(decoded.all { it.channels.layout == first.channels.layout }) { "HDR 校准 gain map 通道布局发生变化" }
 
-            val backgroundR = FloatArray(decoded.size)
-            val backgroundG = FloatArray(decoded.size)
-            val backgroundB = FloatArray(decoded.size)
-            decoded.forEachIndexed { sampleIndex, sample ->
-                backgroundR[sampleIndex] = GainMapMath.toLogGain(mode(sample.channels.r), sample.metadata[0])
-                backgroundG[sampleIndex] = GainMapMath.toLogGain(mode(sample.channels.g), sample.metadata[1])
-                backgroundB[sampleIndex] = GainMapMath.toLogGain(mode(sample.channels.b), sample.metadata[2])
-            }
-            require(span(backgroundR) >= MIN_BACKGROUND_LOG_SPAN || span(backgroundG) >= MIN_BACKGROUND_LOG_SPAN || span(backgroundB) >= MIN_BACKGROUND_LOG_SPAN) {
-                "HDR 探针没有产生足够的 gain map 动态范围；请确认在 HDR 模式下重新截图"
-            }
-
-            val count = first.channels.width * first.channels.height
-            val result = ArrayList<GainMapPixel>(count / 20)
-            var trainingSquared = 0.0
-            var validationMax = 0f
-            val observedR = FloatArray(decoded.size)
-            val observedG = FloatArray(decoded.size)
-            val observedB = FloatArray(decoded.size)
-            var anyObservableEffect = false
-
-            for (index in 0 until count) {
-                if ((index and 0x3fff) == 0) coroutineContext.ensureActive()
-                var effect = 0f
-                decoded.forEachIndexed { sampleIndex, sample ->
-                    observedR[sampleIndex] = GainMapMath.toLogGain(sample.channels.r[index], sample.metadata[0])
-                    observedG[sampleIndex] = GainMapMath.toLogGain(sample.channels.g[index], sample.metadata[1])
-                    observedB[sampleIndex] = GainMapMath.toLogGain(sample.channels.b[index], sample.metadata[2])
-                    effect = max(effect, abs(observedR[sampleIndex] - backgroundR[sampleIndex]))
-                    effect = max(effect, abs(observedG[sampleIndex] - backgroundG[sampleIndex]))
-                    effect = max(effect, abs(observedB[sampleIndex] - backgroundB[sampleIndex]))
-                }
-                if (effect < MIN_OBSERVABLE_LOG_EFFECT) continue
-                anyObservableEffect = true
-
-                val fit = GainMapMath.fit(
-                    backgroundR, backgroundG, backgroundB,
-                    observedR, observedG, observedB,
-                    TRAINING_INDICES, VALIDATION_INDICES,
-                ) ?: continue
-                if (!accepted(fit)) continue
-
-                result += GainMapPixel(
-                    index = index,
-                    slopeR = fit.slopeR,
-                    slopeG = fit.slopeG,
-                    slopeB = fit.slopeB,
-                    interceptR = fit.interceptR,
-                    interceptG = fit.interceptG,
-                    interceptB = fit.interceptB,
-                    validationError = fit.validationMaxError,
-                )
-                trainingSquared += fit.trainingRmse * fit.trainingRmse
-                validationMax = max(validationMax, fit.validationMaxError)
-            }
-
-            if (anyObservableEffect) {
-                require(result.isNotEmpty()) { "检测到 gain map 中存在水印影响，但固定模型未通过留出验证；拒绝保存不可靠 HDR 模型" }
-            }
-            GainMapProfile(
-                baseWidth = first.baseWidth,
-                baseHeight = first.baseHeight,
-                width = first.channels.width,
-                height = first.channels.height,
-                layout = first.channels.layout,
-                pixels = result,
-                calibrationLevels = decoded.size,
-                calibrationRmse = if (result.isEmpty()) 0f else sqrt(trainingSquared / result.size).toFloat(),
-                validationMaxError = validationMax,
-            )
-        } finally {
-            decoded.forEach { it.bitmap.recycle() }
+        val backgroundR = FloatArray(decoded.size)
+        val backgroundG = FloatArray(decoded.size)
+        val backgroundB = FloatArray(decoded.size)
+        decoded.forEachIndexed { sampleIndex, sample ->
+            backgroundR[sampleIndex] = GainMapMath.toLogGain(mode(sample.channels.r), sample.metadata[0])
+            backgroundG[sampleIndex] = GainMapMath.toLogGain(mode(sample.channels.g), sample.metadata[1])
+            backgroundB[sampleIndex] = GainMapMath.toLogGain(mode(sample.channels.b), sample.metadata[2])
         }
+        require(span(backgroundR) >= MIN_BACKGROUND_LOG_SPAN || span(backgroundG) >= MIN_BACKGROUND_LOG_SPAN || span(backgroundB) >= MIN_BACKGROUND_LOG_SPAN) {
+            "HDR 探针没有产生足够的 gain map 动态范围；请确认在 HDR 模式下重新截图"
+        }
+
+        val count = first.channels.width * first.channels.height
+        val result = ArrayList<GainMapPixel>(count / 20)
+        var trainingSquared = 0.0
+        var validationMax = 0f
+        val observedR = FloatArray(decoded.size)
+        val observedG = FloatArray(decoded.size)
+        val observedB = FloatArray(decoded.size)
+        var anyObservableEffect = false
+
+        for (index in 0 until count) {
+            if ((index and 0x3fff) == 0) coroutineContext.ensureActive()
+            var effect = 0f
+            decoded.forEachIndexed { sampleIndex, sample ->
+                observedR[sampleIndex] = GainMapMath.toLogGain(sample.channels.r[index], sample.metadata[0])
+                observedG[sampleIndex] = GainMapMath.toLogGain(sample.channels.g[index], sample.metadata[1])
+                observedB[sampleIndex] = GainMapMath.toLogGain(sample.channels.b[index], sample.metadata[2])
+                effect = max(effect, abs(observedR[sampleIndex] - backgroundR[sampleIndex]))
+                effect = max(effect, abs(observedG[sampleIndex] - backgroundG[sampleIndex]))
+                effect = max(effect, abs(observedB[sampleIndex] - backgroundB[sampleIndex]))
+            }
+            if (effect < MIN_OBSERVABLE_LOG_EFFECT) continue
+            anyObservableEffect = true
+
+            val fit = GainMapMath.fit(
+                backgroundR, backgroundG, backgroundB,
+                observedR, observedG, observedB,
+                TRAINING_INDICES, VALIDATION_INDICES,
+            ) ?: continue
+            if (!accepted(fit)) continue
+
+            result += GainMapPixel(
+                index = index,
+                slopeR = fit.slopeR,
+                slopeG = fit.slopeG,
+                slopeB = fit.slopeB,
+                interceptR = fit.interceptR,
+                interceptG = fit.interceptG,
+                interceptB = fit.interceptB,
+                validationError = fit.validationMaxError,
+            )
+            trainingSquared += fit.trainingRmse * fit.trainingRmse
+            validationMax = max(validationMax, fit.validationMaxError)
+        }
+
+        if (anyObservableEffect) {
+            require(result.isNotEmpty()) { "检测到 gain map 中存在水印影响，但固定模型未通过留出验证；拒绝保存不可靠 HDR 模型" }
+        }
+        GainMapProfile(
+            baseWidth = first.baseWidth,
+            baseHeight = first.baseHeight,
+            width = first.channels.width,
+            height = first.channels.height,
+            layout = first.channels.layout,
+            pixels = result,
+            calibrationLevels = decoded.size,
+            calibrationRmse = if (result.isEmpty()) 0f else sqrt(trainingSquared / result.size).toFloat(),
+            validationMaxError = validationMax,
+        )
     }
 
     private fun decodeSample(uri: Uri): DecodedGainSample {
@@ -115,18 +111,22 @@ class GainMapCalibrationEngine(private val resolver: ContentResolver) {
         try {
             val gainmap = bitmap.gainmap ?: error("这张校准截图没有 gain map；请确认 HDR 探针正在显示")
             require(GainMapBitmapIO.isSdrToHdr(gainmap)) { "暂不接受 HDR_TO_SDR gain map 校准" }
-            val channels = GainMapBitmapIO.read(gainmap.gainmapContents)
-            val metadata = GainMapBitmapIO.metadata(gainmap).first
-            return DecodedGainSample(bitmap, bitmap.width, bitmap.height, channels, metadata)
-        } catch (t: Throwable) {
+            return DecodedGainSample(
+                baseWidth = bitmap.width,
+                baseHeight = bitmap.height,
+                channels = GainMapBitmapIO.read(gainmap.gainmapContents),
+                metadata = GainMapBitmapIO.metadata(gainmap).first,
+            )
+        } finally {
             bitmap.recycle()
-            throw t
         }
     }
 
     private fun accepted(fit: GainMapFit): Boolean {
         val slopes = floatArrayOf(fit.slopeR, fit.slopeG, fit.slopeB)
-        return slopes.all { it.isFinite() && it in MIN_SLOPE..MAX_SLOPE } && fit.trainingRmse <= MAX_TRAINING_RMSE && fit.validationMaxError <= MAX_VALIDATION_ERROR
+        return slopes.all { it.isFinite() && it in MIN_SLOPE..MAX_SLOPE } &&
+            fit.trainingRmse <= MAX_TRAINING_RMSE &&
+            fit.validationMaxError <= MAX_VALIDATION_ERROR
     }
 
     private fun mode(values: IntArray): Int {
@@ -140,7 +140,6 @@ class GainMapCalibrationEngine(private val resolver: ContentResolver) {
     private fun span(values: FloatArray): Float = (values.maxOrNull() ?: 0f) - (values.minOrNull() ?: 0f)
 
     private data class DecodedGainSample(
-        val bitmap: Bitmap,
         val baseWidth: Int,
         val baseHeight: Int,
         val channels: GainMapChannels,
