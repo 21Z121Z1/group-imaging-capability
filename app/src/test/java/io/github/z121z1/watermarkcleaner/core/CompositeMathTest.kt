@@ -85,6 +85,27 @@ class CompositeMathTest {
         assertTrue(fit.validationMaxError <= 1.10f)
     }
 
+    @Test
+    fun flattenedHdrP3Baseline_canBeCalibratedWithoutGainMapContainer() {
+        // ColorOS HDR-window screenshots can be flattened into a Display-P3 JPEG. The six requested
+        // grays then arrive at the screenshot stage with a non-identity tone mapping. Calibration
+        // must use those observed modal values rather than require a JPEG_R gain map container.
+        val p3ScreenshotBaseline = intArrayOf(0, 38, 71, 142, 222, 254)
+        val observed = encodedComposite(
+            p3ScreenshotBaseline,
+            alpha = CompositeMath.OPLUS_BETA_TEXT_ALPHA,
+            overlay = CompositeMath.OPLUS_BETA_TEXT_CODE.toFloat(),
+        )
+        val fit = CompositeMath.fitNeutralOverlay(
+            p3ScreenshotBaseline, p3ScreenshotBaseline, p3ScreenshotBaseline,
+            observed, observed, observed,
+            training, validation, BlendSpace.ENCODED_SRGB,
+        )!!
+        assertTrue(CompositeMath.isOplusBetaWatermark(fit))
+        assertTrue(fit.trainingRmse <= .55f)
+        assertTrue(fit.validationMaxError <= 1.10f)
+    }
+
     private fun fitNeutral(observed: IntArray, space: BlendSpace): CompositeFit = CompositeMath.fitNeutralOverlay(
         baseline, baseline, baseline,
         observed, observed, observed,
