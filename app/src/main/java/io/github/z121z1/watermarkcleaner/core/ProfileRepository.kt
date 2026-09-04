@@ -33,6 +33,10 @@ class ProfileRepository(context: Context) {
         legacyV2GainFile.delete()
     }
 
+    fun deleteHdrGain(baseWidth: Int, baseHeight: Int) {
+        hdrGainFile(baseWidth, baseHeight).delete()
+    }
+
     fun hasAnyBase(): Boolean {
         if (legacyPrimaryFile.isFile) return true
         return dir.listFiles().orEmpty().any { BASE_FILE.matches(it.name) }
