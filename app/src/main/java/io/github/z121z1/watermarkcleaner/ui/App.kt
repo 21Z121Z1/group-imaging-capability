@@ -90,6 +90,9 @@ import io.github.z121z1.watermarkcleaner.QueueItem
 import io.github.z121z1.watermarkcleaner.QueueStatus
 import io.github.z121z1.watermarkcleaner.UiState
 import io.github.z121z1.watermarkcleaner.core.CalibrationEngine
+import io.github.z121z1.watermarkcleaner.core.CalibrationOrientation
+import io.github.z121z1.watermarkcleaner.core.CalibrationTarget
+import io.github.z121z1.watermarkcleaner.core.DynamicRange
 import io.github.z121z1.watermarkcleaner.core.HdrProbeFactory
 import io.github.z121z1.watermarkcleaner.core.HdrProbePattern
 import io.github.z121z1.watermarkcleaner.data.PhotoLibraryAccess
@@ -204,8 +207,7 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
                             ),
                         )
                     },
-                    onStartSdr = { viewModel.startCalibration(false) },
-                    onStartHdr = { viewModel.startCalibration(true) },
+                    onStart = viewModel::startCalibration,
                     onReset = viewModel::resetModels,
                 )
                 Destination.SETTINGS -> SettingsScreen(
@@ -393,22 +395,26 @@ private fun CalibrationHomeScreen(
     state: UiState,
     mediaAccess: PhotoLibraryAccess,
     onRequestFullAccess: () -> Unit,
-    onStartSdr: () -> Unit,
-    onStartHdr: () -> Unit,
+    onStart: (CalibrationTarget) -> Unit,
     onReset: () -> Unit,
 ) {
+    val portraitSdr = CalibrationTarget(CalibrationOrientation.PORTRAIT, DynamicRange.SDR)
+    val landscapeSdr = CalibrationTarget(CalibrationOrientation.LANDSCAPE, DynamicRange.SDR)
+    val portraitHdr = CalibrationTarget(CalibrationOrientation.PORTRAIT, DynamicRange.HDR)
+    val landscapeHdr = CalibrationTarget(CalibrationOrientation.LANDSCAPE, DynamicRange.HDR)
+
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { PageHeader("校准", "像刚才一样，让已知灰阶经过系统截图链路，再拟合 Y = aX + b") }
+        item { PageHeader("校准", "四套模型完全独立：竖/横屏 × SDR/HDR，避免把不同方向的水印平铺位置混在一起") }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("截图接收", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     when (mediaAccess) {
-                        PhotoLibraryAccess.FULL -> "完整照片访问：检测到截图后会自动查询刚生成的 Screenshot。"
+                        PhotoLibraryAccess.FULL -> "完整照片访问：检测到截图后会等待 ColorOS 完成编码并自动读取新 Screenshot。"
                         PhotoLibraryAccess.PARTIAL -> "仅选定照片访问：检测到截图后会打开 Photo Picker，请点选刚才的截图。"
                         PhotoLibraryAccess.NONE -> "无照片库访问：检测到截图后会打开 Photo Picker；普通处理不需要照片库权限。"
                     },
@@ -423,20 +429,34 @@ private fun CalibrationHomeScreen(
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("SDR 六灰阶", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("0 / 32 / 64 / 128 / 192 / 255，按系统截图顺序自动收集。")
+                Text("0 / 32 / 64 / 128 / 192 / 255，竖屏和横屏分别校准。")
                 Spacer(Modifier.height(10.dp))
-                Button(onClick = onStartSdr) { Text("开始 SDR 校准") }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = { onStart(portraitSdr) }) {
+                        Text(if (portraitSdr in state.calibratedTargets) "重校竖屏 SDR" else "竖屏 SDR")
+                    }
+                    OutlinedButton(onClick = { onStart(landscapeSdr) }) {
+                        Text(if (landscapeSdr in state.calibratedTargets) "重校横屏 SDR" else "横屏 SDR")
+                    }
+                }
             }
         }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("HDR 链路校准", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("HDR / P3 截图链路", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "切换窗口到 HDR color mode，并用带 Gainmap 的已知灰阶进入截图链路。主图仍按六灰阶拟合；输出时同时清理 Ultra HDR gain map。",
+                    "HDR color mode 仍由带 Gainmap 的探针激活，但 ColorOS 截图可能把最终画面扁平化为 Display-P3 JPEG，而不是把窗口里的 gain map 原样写进截图文件。这里校准最终截图像素；只有文件实际含 gain map 时才额外拟合 gain-map 模型。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(10.dp))
-                Button(onClick = onStartHdr) { Text("激活 HDR 并校准") }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = { onStart(portraitHdr) }) {
+                        Text(if (portraitHdr in state.calibratedTargets) "重校竖屏 HDR" else "竖屏 HDR")
+                    }
+                    OutlinedButton(onClick = { onStart(landscapeHdr) }) {
+                        Text(if (landscapeHdr in state.calibratedTargets) "重校横屏 HDR" else "横屏 HDR")
+                    }
+                }
             }
         }
         if (state.calibration.message != null) {
@@ -501,7 +521,7 @@ private fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("清理 HDR gain map", fontWeight = FontWeight.SemiBold)
-                        Text("优先使用 gain profile；否则仅在已知水印掩膜内做确定性局部中值清理。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("仅当输入文件确实携带 gain map 时使用独立 gain profile；ColorOS 扁平 P3 截图不需要这一层。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = state.cleanHdrGainMap, onCheckedChange = onCleanHdr)
                 }
@@ -568,25 +588,27 @@ private fun CalibrationCaptureScreen(
         val callback = Activity.ScreenCaptureCallback {
             if (captureBusy) return@ScreenCaptureCallback
             captureBusy = true
-            val started = System.currentTimeMillis() - 2_000L
+            val started = System.currentTimeMillis() - 1_500L
+            val excluded = calibration.samples.toSet()
             scope.launch {
-                if (finder.access() == PhotoLibraryAccess.FULL) {
-                    var found: android.net.Uri? = null
-                    repeat(18) {
-                        found = finder.findAfter(started)
-                        if (found != null) return@repeat
-                        delay(120)
-                    }
-                    if (found != null) {
-                        onScreenshotUri(found!!)
+                try {
+                    if (finder.access() == PhotoLibraryAccess.FULL) {
+                        repeat(48) {
+                            val found = finder.findAfter(started, excluded)
+                            if (found != null) {
+                                onScreenshotUri(found)
+                                return@launch
+                            }
+                            delay(250)
+                        }
+                        onMessage("检测到截图，但 12 秒内媒体库仍未发布新文件；请从 Photo Picker 选择刚才的截图")
+                        onNeedPicker()
                     } else {
-                        onMessage("检测到截图，但媒体库尚未找到文件；请从 Photo Picker 选择刚才的截图")
                         onNeedPicker()
                     }
-                } else {
-                    onNeedPicker()
+                } finally {
+                    captureBusy = false
                 }
-                captureBusy = false
             }
         }
         activity.registerScreenCaptureCallback(activity.mainExecutor, callback)
