@@ -21,7 +21,7 @@ class WatermarkProcessor(
     private val resolver: ContentResolver,
     private val profiles: ProfileRepository,
 ) {
-    suspend fun process(uri: Uri, cleanHdrFallback: Boolean = true): ProcessedImage =
+    suspend fun process(uri: Uri, cleanHdrGainMap: Boolean = true): ProcessedImage =
         withContext(Dispatchers.Default) {
             val decoded = resolver.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(
@@ -44,25 +44,23 @@ class WatermarkProcessor(
 
                 var gainMapMode = GainMapMode.NONE
                 if (originalGainmap != null) {
+                    require(cleanHdrGainMap) { "精确 HDR 去水印要求启用“清理 HDR gain map”" }
                     require(GainMapBitmapIO.isSdrToHdr(originalGainmap)) { "HDR_TO_SDR gain map 暂不支持精确去水印" }
                     val oldContents = originalGainmap.gainmapContents
                     val targetConfig = oldContents.config ?: Bitmap.Config.ARGB_8888
                     val newContents = oldContents.copy(targetConfig, true)
                         ?: error("无法创建可编辑 HDR gain map")
                     val gainProfile = profiles.loadHdrGain(decoded.width, decoded.height)
-                    if (gainProfile != null) {
-                        require(gainProfile.width == newContents.width && gainProfile.height == newContents.height) {
-                            "HDR gain map 尺寸已变化；请重新校准 ${orientation.label} HDR"
-                        }
-                        require(gainProfile.layout == GainMapBitmapIO.read(newContents).layout) {
-                            "HDR gain map 通道布局已变化；请重新校准 ${orientation.label} HDR"
-                        }
-                        GainMapProfileApplier.apply(newContents, originalGainmap, gainProfile)
-                        gainMapMode = GainMapMode.CALIBRATED
-                    } else if (cleanHdrFallback) {
-                        GainMapMaskCleaner.clean(newContents, primary)
-                        gainMapMode = GainMapMode.LOCAL_FALLBACK
+                        ?: error("缺少 ${orientation.label} HDR 的独立 gain-map 校准模型；请重新完成 HDR 校准")
+                    require(gainProfile.width == newContents.width && gainProfile.height == newContents.height) {
+                        "HDR gain map 尺寸已变化；请重新校准 ${orientation.label} HDR"
                     }
+                    val layout = GainMapBitmapIO.read(newContents).layout
+                    require(gainProfile.layout == layout) {
+                        "HDR gain map 通道布局已变化；请重新校准 ${orientation.label} HDR"
+                    }
+                    GainMapProfileApplier.apply(newContents, originalGainmap, gainProfile)
+                    gainMapMode = GainMapMode.CALIBRATED
                     val replacement = if (Build.VERSION.SDK_INT >= 35) {
                         Gainmap(originalGainmap, newContents)
                     } else {
