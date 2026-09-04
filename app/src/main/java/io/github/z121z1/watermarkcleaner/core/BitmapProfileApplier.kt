@@ -40,9 +40,9 @@ object BitmapProfileApplier {
                 val r = (argb ushr 16) and 0xff
                 val g = (argb ushr 8) and 0xff
                 val b = argb and 0xff
-                val rr = AffineMath.invert(r, model.slopeR, model.interceptR)
-                val gg = AffineMath.invert(g, model.slopeG, model.interceptG)
-                val bb = AffineMath.invert(b, model.slopeB, model.interceptB)
+                val rr = CompositeMath.invert(r, model.slopeR, model.interceptR, model.blendSpace)
+                val gg = CompositeMath.invert(g, model.slopeG, model.interceptG, model.blendSpace)
+                val bb = CompositeMath.invert(b, model.slopeB, model.interceptB, model.blendSpace)
                 pixels[local] = (a shl 24) or (rr shl 16) or (gg shl 8) or bb
                 cursor++
             }
