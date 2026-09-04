@@ -12,34 +12,37 @@ class CompositeMathTest {
     private val baseline = intArrayOf(0, 32, 64, 128, 192, 255)
 
     @Test
-    fun encodedSourceOver_recoversBlackShadowAndWhiteText() {
-        val blackShadow = encodedComposite(baseline, alpha = .24f, overlay = 0f)
-        val shadowFit = CompositeMath.fit(
-            baseline, baseline, baseline,
-            blackShadow, blackShadow, blackShadow,
-            training, validation, BlendSpace.ENCODED_SRGB,
-        )!!
+    fun encodedSourceOver_recoversAospDefaultShadowTextAndOverlap() {
+        // AOSP Watermark defaults: text=0x60ffffff, shadow=0xb0000000.
+        val shadowAlpha = 0xb0 / 255f
+        val textAlpha = 0x60 / 255f
+
+        val blackShadow = encodedComposite(baseline, alpha = shadowAlpha, overlay = 0f)
+        val shadowFit = fitEncoded(blackShadow)
         assertTrue(CompositeMath.isPhysicalSourceOver(shadowFit))
         assertTrue(shadowFit.validationMaxError <= 1f)
 
-        val whiteText = encodedComposite(baseline, alpha = .36f, overlay = 255f)
-        val textFit = CompositeMath.fit(
-            baseline, baseline, baseline,
-            whiteText, whiteText, whiteText,
-            training, validation, BlendSpace.ENCODED_SRGB,
-        )!!
+        val whiteText = encodedComposite(baseline, alpha = textAlpha, overlay = 255f)
+        val textFit = fitEncoded(whiteText)
         assertTrue(CompositeMath.isPhysicalSourceOver(textFit))
         assertTrue(textFit.validationMaxError <= 1f)
+
+        // A fixed shadow followed by fixed text is still exactly representable as one source-over
+        // composite per pixel. This covers the glyph/shadow overlap region, not only their edges.
+        val overlap = encodedComposite(
+            encodedComposite(baseline, alpha = shadowAlpha, overlay = 0f),
+            alpha = textAlpha,
+            overlay = 255f,
+        )
+        val overlapFit = fitEncoded(overlap)
+        assertTrue(CompositeMath.isPhysicalSourceOver(overlapFit))
+        assertTrue(overlapFit.validationMaxError <= 1f)
     }
 
     @Test
     fun inversion_isWithinOneCodeValueForQuantizedSourceOver() {
         val observations = encodedComposite(baseline, alpha = .24f, overlay = 0f)
-        val fit = CompositeMath.fit(
-            baseline, baseline, baseline,
-            observations, observations, observations,
-            training, validation, BlendSpace.ENCODED_SRGB,
-        )!!
+        val fit = fitEncoded(observations)
         for (input in 0..255) {
             val observed = ((1f - .24f) * input).roundToInt().coerceIn(0, 255)
             val restored = CompositeMath.invert(observed, fit.slopeR, fit.interceptR, fit.blendSpace)
@@ -77,6 +80,12 @@ class CompositeMathTest {
         assertTrue(CompositeMath.isPhysicalSourceOver(fit))
         assertTrue(fit.validationMaxError <= 1f)
     }
+
+    private fun fitEncoded(observed: IntArray): CompositeFit = CompositeMath.fit(
+        baseline, baseline, baseline,
+        observed, observed, observed,
+        training, validation, BlendSpace.ENCODED_SRGB,
+    )!!
 
     private fun encodedComposite(input: IntArray, alpha: Float, overlay: Float): IntArray =
         IntArray(input.size) { index ->
