@@ -26,7 +26,7 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
       - name: Install Android 17 platform
-        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-CinnamonBun" "platform-tools"
+        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37.0" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
@@ -54,7 +54,7 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
       - name: Install Android 17 build platform
-        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-CinnamonBun" "platform-tools"
+        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37.0" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
