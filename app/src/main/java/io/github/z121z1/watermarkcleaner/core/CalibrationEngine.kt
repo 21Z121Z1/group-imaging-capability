@@ -17,10 +17,11 @@ import kotlin.math.sqrt
 
 class CalibrationEngine(private val resolver: ContentResolver) {
     companion object {
-        // 96 and 160 are hold-out levels: they are never used to fit coefficients.
-        val LEVELS = intArrayOf(0, 32, 64, 96, 128, 160, 192, 255)
-        private val TRAINING_INDICES = intArrayOf(0, 1, 2, 4, 6, 7)
-        private val VALIDATION_INDICES = intArrayOf(3, 5)
+        // Keep the original six-step MD3 capture flow. 64 and 192 are hold-out levels and are
+        // never used to solve coefficients; they independently verify the compositor model.
+        val LEVELS = intArrayOf(0, 32, 64, 128, 192, 255)
+        private val TRAINING_INDICES = intArrayOf(0, 1, 3, 5)
+        private val VALIDATION_INDICES = intArrayOf(2, 4)
         private const val STRIP_HEIGHT = 64
         private const val MIN_OBSERVABLE_EFFECT = 0.50f
         private const val MIN_ALPHA = 0.0010f
