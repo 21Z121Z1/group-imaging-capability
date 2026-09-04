@@ -17,8 +17,6 @@ import kotlin.math.sqrt
 
 class CalibrationEngine(private val resolver: ContentResolver) {
     companion object {
-        // Keep the original six-step MD3 capture flow. 64 and 192 are hold-out levels and are
-        // never used to solve coefficients; they independently verify the compositor model.
         val LEVELS = intArrayOf(0, 32, 64, 128, 192, 255)
         private val TRAINING_INDICES = intArrayOf(0, 1, 3, 5)
         private val VALIDATION_INDICES = intArrayOf(2, 4)
@@ -64,8 +62,6 @@ class CalibrationEngine(private val resolver: ContentResolver) {
                     }
                 }
 
-                // Use the modal pixel as the actual screenshot baseline after color conversion/quantization.
-                // This prevents a global screenshot transform from being learned as part of the watermark.
                 val backgroundR = IntArray(LEVELS.size)
                 val backgroundG = IntArray(LEVELS.size)
                 val backgroundB = IntArray(LEVELS.size)
@@ -98,7 +94,7 @@ class CalibrationEngine(private val resolver: ContentResolver) {
                     ).toFloat()
                     if (endpointEffect < MIN_OBSERVABLE_EFFECT) continue
 
-                    val encoded = CompositeMath.fit(
+                    val encoded = CompositeMath.fitNeutralOverlay(
                         backgroundR, backgroundG, backgroundB,
                         observedR, observedG, observedB,
                         TRAINING_INDICES, VALIDATION_INDICES,
@@ -112,7 +108,7 @@ class CalibrationEngine(private val resolver: ContentResolver) {
                     ) {
                         encoded
                     } else {
-                        val linear = CompositeMath.fit(
+                        val linear = CompositeMath.fitNeutralOverlay(
                             backgroundR, backgroundG, backgroundB,
                             observedR, observedG, observedB,
                             TRAINING_INDICES, VALIDATION_INDICES,
@@ -148,7 +144,7 @@ class CalibrationEngine(private val resolver: ContentResolver) {
                 }
                 y0 += stripHeight
             }
-            require(result.isNotEmpty()) { "No verified watermark pixels found" }
+            require(result.isNotEmpty()) { "No verified OPlus beta watermark pixels found" }
             WatermarkProfile(
                 width = width,
                 height = height,
@@ -163,7 +159,7 @@ class CalibrationEngine(private val resolver: ContentResolver) {
     }
 
     private fun isAccepted(fit: CompositeFit): Boolean =
-        CompositeMath.isPhysicalSourceOver(fit) &&
+        CompositeMath.isOplusBetaWatermark(fit) &&
             fit.trainingRmse <= MAX_TRAINING_RMSE &&
             fit.validationMaxError <= MAX_VALIDATION_ERROR
 
