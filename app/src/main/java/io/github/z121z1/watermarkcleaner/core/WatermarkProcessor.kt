@@ -33,7 +33,15 @@ class WatermarkProcessor(
 
             try {
                 val originalGainmap = decoded.gainmap
-                val range = if (originalGainmap != null) DynamicRange.HDR else DynamicRange.SDR
+                // ColorOS 17 screenshots from an HDR window are flattened to a Display-P3 JPEG in
+                // the user's samples rather than exported as JPEG_R with an attached gain map.
+                // Treat wide-gamut screenshots as the HDR/P3 compositor path so they use the
+                // independently calibrated profile instead of accidentally falling back to SDR.
+                val range = if (originalGainmap != null || decoded.colorSpace?.isWideGamut == true) {
+                    DynamicRange.HDR
+                } else {
+                    DynamicRange.SDR
+                }
                 val orientation = CalibrationOrientation.fromDimensions(decoded.width, decoded.height)
                 val primary = profiles.loadBase(decoded.width, decoded.height, range)
                     ?: error("缺少 ${orientation.label} ${range.label} 的 ${decoded.width}×${decoded.height} 校准模型；请先单独校准")
@@ -51,7 +59,7 @@ class WatermarkProcessor(
                     val newContents = oldContents.copy(targetConfig, true)
                         ?: error("无法创建可编辑 HDR gain map")
                     val gainProfile = profiles.loadHdrGain(decoded.width, decoded.height)
-                        ?: error("缺少 ${orientation.label} HDR 的独立 gain-map 校准模型；请重新完成 HDR 校准")
+                        ?: error("这张图片带 gain map，但当前 ${orientation.label} HDR 校准截图是扁平 HDR/P3，未得到可验证的 gain-map 模型")
                     require(gainProfile.width == newContents.width && gainProfile.height == newContents.height) {
                         "HDR gain map 尺寸已变化；请重新校准 ${orientation.label} HDR"
                     }
@@ -68,7 +76,7 @@ class WatermarkProcessor(
                     }
                     output.gainmap = replacement
                 }
-                ProcessedImage(output, originalGainmap != null, gainMapMode)
+                ProcessedImage(output, range == DynamicRange.HDR, gainMapMode)
             } finally {
                 decoded.recycle()
             }
