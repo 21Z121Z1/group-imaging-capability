@@ -8,9 +8,19 @@ import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-data class CompositePixel(
+enum class GainMapLayout(val wireValue: Int) {
+    MONO(0),
+    RGB(1),
+    ;
+
+    companion object {
+        fun fromWireValue(value: Int): GainMapLayout = entries.firstOrNull { it.wireValue == value }
+            ?: throw IllegalArgumentException("unsupported gain-map layout: $value")
+    }
+}
+
+data class GainMapPixel(
     val index: Int,
-    val blendSpace: BlendSpace,
     val slopeR: Float,
     val slopeG: Float,
     val slopeB: Float,
@@ -20,33 +30,39 @@ data class CompositePixel(
     val validationError: Float,
 )
 
-data class WatermarkProfile(
+data class GainMapProfile(
+    val baseWidth: Int,
+    val baseHeight: Int,
     val width: Int,
     val height: Int,
-    val pixels: List<CompositePixel>,
-    val calibrationLevels: Int = 0,
-    val calibrationRmse: Float = 0f,
-    val validationMaxError: Float = 0f,
+    val layout: GainMapLayout,
+    val pixels: List<GainMapPixel>,
+    val calibrationLevels: Int,
+    val calibrationRmse: Float,
+    val validationMaxError: Float,
 ) {
     init {
-        require(width > 0 && height > 0)
+        require(baseWidth > 0 && baseHeight > 0 && width > 0 && height > 0)
         require(pixels.size <= width * height)
-        require(calibrationLevels in 0..256)
+        require(calibrationLevels in 2..256)
         require(calibrationRmse.isFinite() && calibrationRmse >= 0f)
         require(validationMaxError.isFinite() && validationMaxError >= 0f)
     }
 }
 
-object WatermarkProfileCodec {
-    private const val MAGIC = 0x574D5233 // WMR3
-    private const val VERSION = 3
+object GainMapProfileCodec {
+    private const val MAGIC = 0x474D5231 // GMR1
+    private const val VERSION = 1
 
-    fun write(profile: WatermarkProfile, output: OutputStream) {
+    fun write(profile: GainMapProfile, output: OutputStream) {
         DataOutputStream(output.buffered()).use { out ->
             out.writeInt(MAGIC)
             out.writeInt(VERSION)
+            out.writeInt(profile.baseWidth)
+            out.writeInt(profile.baseHeight)
             out.writeInt(profile.width)
             out.writeInt(profile.height)
+            out.writeByte(profile.layout.wireValue)
             out.writeInt(profile.pixels.size)
             out.writeInt(profile.calibrationLevels)
             out.writeFloat(profile.calibrationRmse)
@@ -54,10 +70,9 @@ object WatermarkProfileCodec {
             var previous = -1
             profile.pixels.forEach { pixel ->
                 require(pixel.index in 0 until profile.width * profile.height)
-                require(pixel.index > previous) { "profile indices must be strictly increasing" }
+                require(pixel.index > previous) { "gain-map profile indices must be strictly increasing" }
                 validate(pixel)
                 out.writeInt(pixel.index)
-                out.writeByte(pixel.blendSpace.wireValue)
                 out.writeFloat(pixel.slopeR)
                 out.writeFloat(pixel.slopeG)
                 out.writeFloat(pixel.slopeB)
@@ -70,28 +85,30 @@ object WatermarkProfileCodec {
         }
     }
 
-    fun read(input: InputStream): WatermarkProfile {
+    fun read(input: InputStream): GainMapProfile {
         DataInputStream(input.buffered()).use { data ->
-            require(data.readInt() == MAGIC) { "not a WMR3 profile; recalibration is required" }
-            require(data.readInt() == VERSION) { "unsupported profile version; recalibration is required" }
+            require(data.readInt() == MAGIC) { "not a GMR1 gain-map profile; HDR recalibration is required" }
+            require(data.readInt() == VERSION) { "unsupported gain-map profile version" }
+            val baseWidth = data.readInt()
+            val baseHeight = data.readInt()
             val width = data.readInt()
             val height = data.readInt()
+            val layout = GainMapLayout.fromWireValue(data.readUnsignedByte())
             val count = data.readInt()
             val calibrationLevels = data.readInt()
             val calibrationRmse = data.readFloat()
             val validationMaxError = data.readFloat()
+            require(baseWidth in 1..16384 && baseHeight in 1..16384)
             require(width in 1..16384 && height in 1..16384)
-            val total = width.toLong() * height.toLong()
-            require(count >= 0 && count.toLong() <= total)
-            require(calibrationLevels in 0..256)
+            require(count >= 0 && count.toLong() <= width.toLong() * height.toLong())
+            require(calibrationLevels in 2..256)
             require(calibrationRmse.isFinite() && calibrationRmse >= 0f)
             require(validationMaxError.isFinite() && validationMaxError >= 0f)
-            val pixels = ArrayList<CompositePixel>(count)
+            val pixels = ArrayList<GainMapPixel>(count)
             var previous = -1
             repeat(count) {
-                val pixel = CompositePixel(
+                val pixel = GainMapPixel(
                     index = data.readInt(),
-                    blendSpace = BlendSpace.fromWireValue(data.readUnsignedByte()),
                     slopeR = data.readFloat(),
                     slopeG = data.readFloat(),
                     slopeB = data.readFloat(),
@@ -101,15 +118,18 @@ object WatermarkProfileCodec {
                     validationError = data.readFloat(),
                 )
                 require(pixel.index in 0 until width * height)
-                require(pixel.index > previous) { "profile indices are not strictly increasing" }
+                require(pixel.index > previous) { "gain-map profile indices are not strictly increasing" }
                 validate(pixel)
                 pixels += pixel
                 previous = pixel.index
             }
-            require(data.read() == -1) { "trailing bytes in profile" }
-            return WatermarkProfile(
+            require(data.read() == -1) { "trailing bytes in gain-map profile" }
+            return GainMapProfile(
+                baseWidth = baseWidth,
+                baseHeight = baseHeight,
                 width = width,
                 height = height,
+                layout = layout,
                 pixels = pixels,
                 calibrationLevels = calibrationLevels,
                 calibrationRmse = calibrationRmse,
@@ -118,7 +138,7 @@ object WatermarkProfileCodec {
         }
     }
 
-    fun writeAtomically(profile: WatermarkProfile, target: File) {
+    fun writeAtomically(profile: GainMapProfile, target: File) {
         target.parentFile?.mkdirs()
         val tmp = File(target.parentFile, ".${target.name}.tmp-${System.nanoTime()}")
         try {
@@ -139,11 +159,11 @@ object WatermarkProfileCodec {
         }
     }
 
-    private fun validate(pixel: CompositePixel) {
+    private fun validate(pixel: GainMapPixel) {
         val slopes = floatArrayOf(pixel.slopeR, pixel.slopeG, pixel.slopeB)
         val intercepts = floatArrayOf(pixel.interceptR, pixel.interceptG, pixel.interceptB)
-        require(slopes.all { it.isFinite() && it in 0.01f..1.05f })
-        require(intercepts.all { it.isFinite() && it in -0.05f..1.05f })
+        require(slopes.all { it.isFinite() && it in 0.01f..2.5f })
+        require(intercepts.all { it.isFinite() && it in -32f..32f })
         require(pixel.validationError.isFinite() && pixel.validationError in 0f..255f)
     }
 }

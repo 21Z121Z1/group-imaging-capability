@@ -17,14 +17,14 @@ class AppSmokeTest {
     @Test
     fun launchesProcessHome() {
         rule.onNodeWithText("截图去水印").assertIsDisplayed()
-        rule.onNodeWithText("选择图片").assertIsDisplayed()
+        rule.onNodeWithText("开始校准").assertIsDisplayed()
     }
 
     @Test
     fun navigatesToCalibrationAndSettings() {
         rule.onNodeWithText("校准").performClick()
-        rule.onNodeWithText("SDR 六灰阶").assertIsDisplayed()
+        rule.onNodeWithText("SDR").assertIsDisplayed()
         rule.onNodeWithText("设置").performClick()
-        rule.onNodeWithText("输出位置").assertIsDisplayed()
+        rule.onNodeWithText("保存位置").assertIsDisplayed()
     }
 }
