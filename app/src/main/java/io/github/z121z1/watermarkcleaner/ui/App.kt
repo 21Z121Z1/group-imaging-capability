@@ -5,22 +5,18 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
-import android.graphics.Color
-import android.os.Build
 import android.util.Size
-import android.view.View
 import android.widget.ImageView
-import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,22 +32,31 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
@@ -62,7 +67,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -70,16 +74,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -97,14 +102,17 @@ import io.github.z121z1.watermarkcleaner.core.HdrProbeFactory
 import io.github.z121z1.watermarkcleaner.core.HdrProbePattern
 import io.github.z121z1.watermarkcleaner.data.PhotoLibraryAccess
 import io.github.z121z1.watermarkcleaner.data.ScreenshotMediaFinder
-import io.github.z121z1.watermarkcleaner.platform.ColorOsCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private enum class Destination(val label: String, val glyph: String) {
-    PROCESS("处理", "净"),
-    CALIBRATE("校准", "准"),
-    SETTINGS("设置", "设"),
+private enum class Destination(
+    val label: String,
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector,
+) {
+    PROCESS("处理", Icons.Filled.PhotoLibrary, Icons.Outlined.PhotoLibrary),
+    CALIBRATE("校准", Icons.Filled.Tune, Icons.Outlined.Tune),
+    SETTINGS("设置", Icons.Filled.Settings, Icons.Outlined.Settings),
 }
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
@@ -112,7 +120,6 @@ private enum class Destination(val label: String, val glyph: String) {
 fun WatermarkCleanerApp(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val activity = LocalActivity.current as? ComponentActivity
     var destination by remember { mutableStateOf(Destination.PROCESS) }
 
     val pickImages = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -124,7 +131,7 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
     ) { uri ->
         viewModel.consumeCalibrationPickerRequest()
         if (uri != null) viewModel.addCalibrationSample(uri)
-        else viewModel.calibrationMessage("未选择截图；请重新截取当前灰阶")
+        else viewModel.calibrationMessage("未选择截图，请重新截取当前灰阶。")
     }
 
     val chooseOutput = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -169,11 +176,17 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
         navigationSuiteType = navType,
         navigationItems = {
             Destination.entries.forEach { item ->
+                val selected = destination == item
                 NavigationSuiteItem(
                     navigationSuiteType = navType,
-                    icon = { NavGlyph(item.glyph, selected = destination == item) },
+                    icon = {
+                        Icon(
+                            imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                            contentDescription = null,
+                        )
+                    },
                     label = { Text(item.label) },
-                    selected = destination == item,
+                    selected = selected,
                     onClick = { destination = item },
                 )
             }
@@ -192,6 +205,7 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
                     onPick = {
                         pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     },
+                    onOpenCalibration = { destination = Destination.CALIBRATE },
                     onProcess = viewModel::processReady,
                     onRemove = viewModel::remove,
                     onClearFinished = viewModel::clearFinished,
@@ -222,24 +236,12 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
     }
 }
 
-@Composable
-private fun NavGlyph(text: String, selected: Boolean) {
-    Surface(
-        modifier = Modifier.size(32.dp),
-        shape = CircleShape,
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 private fun ProcessScreen(
     state: UiState,
     onPick: () -> Unit,
+    onOpenCalibration: () -> Unit,
     onProcess: () -> Unit,
     onRemove: (android.net.Uri) -> Unit,
     onClearFinished: () -> Unit,
@@ -247,58 +249,79 @@ private fun ProcessScreen(
     val adaptiveInfo = currentWindowAdaptiveInfoV2()
     val directive = calculatePaneScaffoldDirective(adaptiveInfo)
     val twoPane = directive.maxHorizontalPartitions >= 2
+    val actionableCount = state.queue.count { it.status == QueueStatus.READY || it.status == QueueStatus.ERROR }
+    val hasFinished = state.queue.any { it.status == QueueStatus.DONE }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         PageHeader(
             title = "截图去水印",
-            subtitle = if (state.modelReady) "模型已就绪 · 本地处理 · 支持 Ultra HDR" else "先完成一次校准，再处理截图",
+            subtitle = if (state.modelReady) "选择截图并处理" else "先完成校准",
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onPick) { Text("选择图片") }
-            Button(
-                onClick = onProcess,
-                enabled = state.modelReady && state.queue.any { it.status == QueueStatus.READY || it.status == QueueStatus.ERROR },
-            ) { Text("开始处理") }
-            if (state.queue.any { it.status == QueueStatus.DONE }) {
-                OutlinedButton(onClick = onClearFinished) { Text("清除已完成") }
-            }
-        }
-
         if (state.queue.isEmpty()) {
-            EmptyProcessCard(state.modelReady)
-        } else if (twoPane) {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                QueueList(
-                    queue = state.queue,
-                    onRemove = onRemove,
-                    modifier = Modifier.weight(0.56f).fillMaxHeight(),
-                )
-                QueueSummary(state.queue, Modifier.weight(0.44f).fillMaxHeight())
-            }
+            EmptyProcessCard(
+                modelReady = state.modelReady,
+                onPick = onPick,
+                onOpenCalibration = onOpenCalibration,
+            )
         } else {
-            QueueList(queue = state.queue, onRemove = onRemove, modifier = Modifier.fillMaxSize())
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FilledTonalButton(onClick = onPick, modifier = Modifier.weight(1f)) {
+                    Text("添加截图")
+                }
+                Button(
+                    onClick = onProcess,
+                    enabled = state.modelReady && actionableCount > 0,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (actionableCount > 0) "处理 $actionableCount 张" else "处理完成")
+                }
+            }
+            if (hasFinished) {
+                TextButton(onClick = onClearFinished) { Text("清除已完成") }
+            }
+
+            if (twoPane) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    QueueList(
+                        queue = state.queue,
+                        onRemove = onRemove,
+                        modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                    )
+                    QueueSummary(state.queue, Modifier.weight(0.42f).fillMaxHeight())
+                }
+            } else {
+                QueueList(queue = state.queue, onRemove = onRemove, modifier = Modifier.fillMaxSize())
+            }
         }
     }
 }
 
 @Composable
-private fun EmptyProcessCard(modelReady: Boolean) {
-    GlassCard(Modifier.fillMaxWidth()) {
+private fun EmptyProcessCard(
+    modelReady: Boolean,
+    onPick: () -> Unit,
+    onOpenCalibration: () -> Unit,
+) {
+    SectionCard(Modifier.fillMaxWidth()) {
         Text(
-            if (modelReady) "通过 Photo Picker 选择截图，或从系统分享菜单把截图发送到这里。"
-            else "校准会显示 6 张已知灰阶并监听系统截图，用截图结果反推出逐像素水印模型。",
-            style = MaterialTheme.typography.bodyLarge,
+            if (modelReady) "还没有截图" else "先完成校准",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
-            "所有计算都在设备本地完成；不会上传图片。",
+            if (modelReady) "选择截图后即可批量去除系统水印。" else "校准完成后即可开始处理截图。",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
         )
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = if (modelReady) onPick else onOpenCalibration) {
+            Text(if (modelReady) "选择截图" else "开始校准")
+        }
     }
 }
 
@@ -319,12 +342,20 @@ private fun QueueList(
 @Composable
 private fun QueueCard(item: QueueItem, onRemove: (android.net.Uri) -> Unit) {
     val context = LocalContext.current
+    val dark = isSystemInDarkTheme()
+    val thumbnailOutline = if (dark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.10f)
     val thumbnail by produceState<Bitmap?>(null, item.uri) {
         value = runCatching { context.contentResolver.loadThumbnail(item.uri, Size(240, 240), null) }.getOrNull()
     }
-    GlassCard(Modifier.fillMaxWidth()) {
+
+    SectionCard(Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = MaterialTheme.shapes.medium, modifier = Modifier.size(76.dp)) {
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.size(72.dp),
+                border = BorderStroke(1.dp, thumbnailOutline),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ) {
                 if (thumbnail != null) {
                     Image(
                         bitmap = thumbnail!!.asImageBitmap(),
@@ -333,52 +364,71 @@ private fun QueueCard(item: QueueItem, onRemove: (android.net.Uri) -> Unit) {
                         contentScale = ContentScale.Crop,
                     )
                 } else {
-                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHigh))
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest))
                 }
             }
-            Column(Modifier.weight(1f)) {
+
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     item.uri.lastPathSegment ?: "图片",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 2,
                     fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
                     when (item.status) {
                         QueueStatus.READY -> "等待处理"
                         QueueStatus.PROCESSING -> "处理中…"
                         QueueStatus.DONE -> item.message ?: "已完成"
-                        QueueStatus.ERROR -> item.message ?: "处理失败"
+                        QueueStatus.ERROR -> item.message ?: "处理失败，请重试"
                     },
-                    color = when (item.status) {
-                        QueueStatus.ERROR -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (item.status == QueueStatus.ERROR) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                if (item.hdr) Text("HDR", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                if (item.hdr) HdrBadge()
             }
-            if (item.status != QueueStatus.PROCESSING) {
-                OutlinedButton(onClick = { onRemove(item.uri) }) { Text("移除") }
+
+            if (item.status == QueueStatus.PROCESSING) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                TextButton(onClick = { onRemove(item.uri) }) { Text("移除") }
             }
         }
     }
 }
 
 @Composable
+private fun HdrBadge() {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+    ) {
+        Text(
+            "HDR",
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 private fun QueueSummary(queue: List<QueueItem>, modifier: Modifier = Modifier) {
-    GlassCard(modifier) {
+    SectionCard(modifier) {
         Text("批处理", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(12.dp))
         SummaryLine("总计", queue.size.toString())
         SummaryLine("已完成", queue.count { it.status == QueueStatus.DONE }.toString())
         SummaryLine("HDR", queue.count { it.hdr }.toString())
         SummaryLine("失败", queue.count { it.status == QueueStatus.ERROR }.toString())
-        HorizontalDivider(Modifier.padding(vertical = 12.dp))
-        Text(
-            "处理按顺序执行，避免同时解码多张 1440×3168 截图造成不必要的峰值内存。",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -402,72 +452,132 @@ private fun CalibrationHomeScreen(
     val landscapeSdr = CalibrationTarget(CalibrationOrientation.LANDSCAPE, DynamicRange.SDR)
     val portraitHdr = CalibrationTarget(CalibrationOrientation.PORTRAIT, DynamicRange.HDR)
     val landscapeHdr = CalibrationTarget(CalibrationOrientation.LANDSCAPE, DynamicRange.HDR)
+    var confirmReset by remember { mutableStateOf(false) }
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("删除全部校准数据？") },
+            text = { Text("删除后需要重新校准才能处理截图。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmReset = false
+                        onReset()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text("删除校准数据")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReset = false }) { Text("取消") }
+            },
+        )
+    }
 
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { PageHeader("校准", "四套模型完全独立：竖/横屏 × SDR/HDR，避免把不同方向的水印平铺位置混在一起") }
+        item { PageHeader("校准", "分别校准竖屏、横屏与 HDR") }
         item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("截图接收", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    when (mediaAccess) {
-                        PhotoLibraryAccess.FULL -> "完整照片访问：检测到截图后会等待 ColorOS 完成编码并自动读取新 Screenshot。"
-                        PhotoLibraryAccess.PARTIAL -> "仅选定照片访问：检测到截图后会打开 Photo Picker，请点选刚才的截图。"
-                        PhotoLibraryAccess.NONE -> "无照片库访问：检测到截图后会打开 Photo Picker；普通处理不需要照片库权限。"
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (mediaAccess != PhotoLibraryAccess.FULL) {
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(onClick = onRequestFullAccess) { Text("授权自动读取截图") }
-                }
-            }
+            CaptureAccessCard(
+                mediaAccess = mediaAccess,
+                onRequestFullAccess = onRequestFullAccess,
+            )
         }
         item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("SDR 六灰阶", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("0 / 32 / 64 / 128 / 192 / 255，竖屏和横屏分别校准。")
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { onStart(portraitSdr) }) {
-                        Text(if (portraitSdr in state.calibratedTargets) "重校竖屏 SDR" else "竖屏 SDR")
-                    }
-                    OutlinedButton(onClick = { onStart(landscapeSdr) }) {
-                        Text(if (landscapeSdr in state.calibratedTargets) "重校横屏 SDR" else "横屏 SDR")
-                    }
-                }
-            }
+            CalibrationGroup(
+                title = "SDR",
+                subtitle = "6 张灰阶截图",
+                portraitTarget = portraitSdr,
+                landscapeTarget = landscapeSdr,
+                calibratedTargets = state.calibratedTargets,
+                onStart = onStart,
+            )
         }
         item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("HDR / P3 截图链路", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "HDR color mode 仍由带 Gainmap 的探针激活，但 ColorOS 截图可能把最终画面扁平化为 Display-P3 JPEG，而不是把窗口里的 gain map 原样写进截图文件。这里校准最终截图像素；只有文件实际含 gain map 时才额外拟合 gain-map 模型。",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { onStart(portraitHdr) }) {
-                        Text(if (portraitHdr in state.calibratedTargets) "重校竖屏 HDR" else "竖屏 HDR")
-                    }
-                    OutlinedButton(onClick = { onStart(landscapeHdr) }) {
-                        Text(if (landscapeHdr in state.calibratedTargets) "重校横屏 HDR" else "横屏 HDR")
-                    }
-                }
-            }
+            CalibrationGroup(
+                title = "HDR / P3",
+                subtitle = "6 张 HDR / P3 灰阶截图",
+                portraitTarget = portraitHdr,
+                landscapeTarget = landscapeHdr,
+                calibratedTargets = state.calibratedTargets,
+                onStart = onStart,
+            )
         }
         if (state.calibration.message != null) {
-            item { GlassCard(Modifier.fillMaxWidth()) { Text(state.calibration.message) } }
+            item {
+                SectionCard(Modifier.fillMaxWidth()) {
+                    Text(state.calibration.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
         if (state.modelReady) {
             item {
-                OutlinedButton(onClick = onReset) { Text("删除当前模型") }
+                TextButton(
+                    onClick = { confirmReset = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text("删除全部校准数据")
+                }
             }
         }
         item { Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp)) }
+    }
+}
+
+@Composable
+private fun CaptureAccessCard(
+    mediaAccess: PhotoLibraryAccess,
+    onRequestFullAccess: () -> Unit,
+) {
+    SectionCard(Modifier.fillMaxWidth()) {
+        Text("自动获取截图", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            when (mediaAccess) {
+                PhotoLibraryAccess.FULL -> "已开启。截图后会自动进入下一步。"
+                PhotoLibraryAccess.PARTIAL -> "需要完整照片访问；否则会打开照片选择器。"
+                PhotoLibraryAccess.NONE -> "未授权时会打开照片选择器。"
+            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (mediaAccess != PhotoLibraryAccess.FULL) {
+            Spacer(Modifier.height(12.dp))
+            FilledTonalButton(onClick = onRequestFullAccess) { Text("允许自动获取") }
+        }
+    }
+}
+
+@Composable
+private fun CalibrationGroup(
+    title: String,
+    subtitle: String,
+    portraitTarget: CalibrationTarget,
+    landscapeTarget: CalibrationTarget,
+    calibratedTargets: Set<CalibrationTarget>,
+    onStart: (CalibrationTarget) -> Unit,
+) {
+    SectionCard(Modifier.fillMaxWidth()) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FilledTonalButton(
+                onClick = { onStart(portraitTarget) },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (portraitTarget in calibratedTargets) "重新校准竖屏" else "校准竖屏")
+            }
+            FilledTonalButton(
+                onClick = { onStart(landscapeTarget) },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (landscapeTarget in calibratedTargets) "重新校准横屏" else "校准横屏")
+            }
+        }
     }
 }
 
@@ -479,67 +589,64 @@ private fun SettingsScreen(
     onQuality: (Int) -> Unit,
     onCleanHdr: (Boolean) -> Unit,
 ) {
-    val context = LocalContext.current
-    val capabilities = remember { ColorOsCompat.detect(context) }
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { PageHeader("设置", "导出、HDR 与平台适配") }
+        item { PageHeader("设置", "输出与画质") }
         item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("输出位置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            SectionCard(Modifier.fillMaxWidth()) {
+                Text("保存位置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    state.outputTree?.toString() ?: "Pictures/截图去水印",
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    if (state.outputTree == null) "Pictures/截图去水印" else "自定义文件夹",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onChooseOutput) { Text("选择目录") }
-                    OutlinedButton(onClick = onDefaultOutput) { Text("恢复默认") }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(onClick = onChooseOutput) { Text("选择文件夹") }
+                    if (state.outputTree != null) {
+                        TextButton(onClick = onDefaultOutput) { Text("使用默认位置") }
+                    }
                 }
-            }
-        }
-        item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("JPEG 质量 ${state.jpegQuality}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+
+                Spacer(Modifier.height(22.dp))
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("JPEG 质量", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Q${state.jpegQuality}", fontWeight = FontWeight.SemiBold)
+                }
                 Slider(
                     value = state.jpegQuality.toFloat(),
                     onValueChange = { onQuality(it.toInt()) },
                     valueRange = 70f..100f,
+                    steps = 29,
                 )
                 Text(
-                    "默认 Q90：保留截图细节，同时让逆合成后亚码值级尾影得到一次有损重量化。",
+                    "默认 Q90；压缩也用于减弱残余水印。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         item {
-            GlassCard(Modifier.fillMaxWidth()) {
+            SectionCard(
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = state.cleanHdrGainMap,
+                        role = Role.Switch,
+                        onValueChange = onCleanHdr,
+                    ),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("清理 HDR gain map", fontWeight = FontWeight.SemiBold)
-                        Text("仅当输入文件确实携带 gain map 时使用独立 gain profile；ColorOS 扁平 P3 截图不需要这一层。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("清理 Ultra HDR 增益图", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "对带增益图的图片同时处理 HDR 层。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    Switch(checked = state.cleanHdrGainMap, onCheckedChange = onCleanHdr)
+                    Switch(checked = state.cleanHdrGainMap, onCheckedChange = null)
                 }
-            }
-        }
-        item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("ColorOS / 自由窗口", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (capabilities.colorOsFamily) "检测到 OPPO / OnePlus / realme 系平台。应用保持 resizeable，并让系统自由窗负责窗口级圆角、阴影与手势。"
-                    else "使用标准 Android 自适应窗口路径。",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "跨窗口模糊：${if (capabilities.crossWindowBlur) "系统支持" else "当前不可用"}。不通过反射调用 ColorOS 签名级私有材质 API，避免 OTA 后失效和隐藏 API 限制。",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
         item { Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp)) }
@@ -561,14 +668,17 @@ private fun CalibrationCaptureScreen(
     val level = CalibrationEngine.LEVELS[calibration.levelIndex]
     var captureBusy by remember(calibration.samples.size) { mutableStateOf(false) }
 
+    BackHandler(onBack = onCancel)
+
     if (calibration.fitting || calibration.complete) {
         LaunchedEffect(Unit) {
             activity?.window?.colorMode = ActivityInfo.COLOR_MODE_DEFAULT
         }
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
-            GlassCard(Modifier.padding(24.dp)) {
+            SectionCard(Modifier.padding(24.dp)) {
                 Text("正在拟合模型", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                Text(calibration.message ?: "分析六张截图…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Text(calibration.message ?: "正在分析 6 张截图…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         return
@@ -601,7 +711,7 @@ private fun CalibrationCaptureScreen(
                             }
                             delay(250)
                         }
-                        onMessage("检测到截图，但 12 秒内媒体库仍未发布新文件；请从 Photo Picker 选择刚才的截图")
+                        onMessage("未能自动读取刚才的截图，请在照片选择器中选择它。")
                         onNeedPicker()
                     } else {
                         onNeedPicker()
@@ -625,9 +735,6 @@ private fun CalibrationCaptureScreen(
     } else {
         Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(level, level, level)))
     }
-
-    // Hardware/system screenshot gesture is the intended control. Long-press/back is not placed on
-    // the calibration frame because any visible control would contaminate the fit.
 }
 
 @Composable
@@ -666,22 +773,27 @@ private fun HdrFlatCalibrationFrame(level: Int) {
 }
 
 @Composable
-private fun PageHeader(title: String, subtitle: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+private fun PageHeader(title: String, subtitle: String? = null) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                subtitle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
     }
 }
 
 @Composable
-private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column.() -> Unit) {
+private fun SectionCard(modifier: Modifier = Modifier, content: @Composable Column.() -> Unit) {
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.90f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
-        tonalElevation = 1.dp,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 0.dp,
     ) {
-        Column(Modifier.padding(18.dp), content = content)
+        Column(Modifier.padding(16.dp), content = content)
     }
 }
