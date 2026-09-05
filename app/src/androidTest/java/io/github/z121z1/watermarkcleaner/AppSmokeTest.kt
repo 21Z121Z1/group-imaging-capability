@@ -17,7 +17,7 @@ class AppSmokeTest {
     @Test
     fun launchesProcessHome() {
         rule.onNodeWithText("截图去水印").assertIsDisplayed()
-        rule.onNodeWithText("选择截图").assertIsDisplayed()
+        rule.onNodeWithText("开始校准").assertIsDisplayed()
     }
 
     @Test
