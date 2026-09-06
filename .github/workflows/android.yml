@@ -93,6 +93,12 @@ jobs:
             adb shell monkey -p io.github.z121z1.watermarkcleaner -c android.intent.category.LAUNCHER 1
             sleep 3
             adb exec-out screencap -p > app/build/verification-screenshots/home-expanded.png
+            adb shell input tap 48 158
+            sleep 1
+            adb exec-out screencap -p > app/build/verification-screenshots/calibration-expanded.png
+            adb shell input tap 48 225
+            sleep 1
+            adb exec-out screencap -p > app/build/verification-screenshots/settings-expanded.png
             adb shell wm size reset
             adb shell wm density reset
       - uses: actions/upload-artifact@v4
