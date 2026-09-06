@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.provider.OpenableColumns
 import android.util.Size
 import android.widget.ImageView
 import androidx.activity.compose.BackHandler
@@ -38,6 +39,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
@@ -51,7 +53,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -82,6 +86,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -131,7 +136,7 @@ fun WatermarkCleanerApp(viewModel: AppViewModel) {
     ) { uri ->
         viewModel.consumeCalibrationPickerRequest()
         if (uri != null) viewModel.addCalibrationSample(uri)
-        else viewModel.calibrationMessage("未选择截图，请重新截取当前灰阶。")
+        else viewModel.calibrationMessage("没有选择截图，请重新截取当前灰阶。")
     }
 
     val chooseOutput = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -256,10 +261,7 @@ private fun ProcessScreen(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        PageHeader(
-            title = "截图去水印",
-            subtitle = if (state.modelReady) "选择截图并处理" else "先完成校准",
-        )
+        PageHeader("截图去水印")
 
         if (state.queue.isEmpty()) {
             EmptyProcessCard(
@@ -277,11 +279,13 @@ private fun ProcessScreen(
                     enabled = state.modelReady && actionableCount > 0,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(if (actionableCount > 0) "处理 $actionableCount 张" else "处理完成")
+                    Text(if (actionableCount > 0) "处理 $actionableCount 张" else "没有待处理")
                 }
             }
             if (hasFinished) {
-                TextButton(onClick = onClearFinished) { Text("清除已完成") }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onClearFinished) { Text("清除已完成") }
+                }
             }
 
             if (twoPane) {
@@ -289,9 +293,9 @@ private fun ProcessScreen(
                     QueueList(
                         queue = state.queue,
                         onRemove = onRemove,
-                        modifier = Modifier.weight(0.58f).fillMaxHeight(),
+                        modifier = Modifier.weight(0.62f).fillMaxHeight(),
                     )
-                    QueueSummary(state.queue, Modifier.weight(0.42f).fillMaxHeight())
+                    QueueSummary(state.queue, Modifier.weight(0.38f).fillMaxHeight())
                 }
             } else {
                 QueueList(queue = state.queue, onRemove = onRemove, modifier = Modifier.fillMaxSize())
@@ -308,18 +312,21 @@ private fun EmptyProcessCard(
 ) {
     SectionCard(Modifier.fillMaxWidth()) {
         Text(
-            if (modelReady) "还没有截图" else "先完成校准",
+            if (modelReady) "选择截图" else "先校准一次",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            if (modelReady) "选择截图后即可批量去除系统水印。" else "校准完成后即可开始处理截图。",
+            if (modelReady) "支持批量选择。" else "用于匹配这台设备的系统水印。",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(16.dp))
-        Button(onClick = if (modelReady) onPick else onOpenCalibration) {
+        Button(
+            onClick = if (modelReady) onPick else onOpenCalibration,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text(if (modelReady) "选择截图" else "开始校准")
         }
     }
@@ -331,7 +338,7 @@ private fun QueueList(
     onRemove: (android.net.Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(queue, key = { it.uri.toString() }) { item ->
             QueueCard(item, onRemove)
         }
@@ -347,12 +354,25 @@ private fun QueueCard(item: QueueItem, onRemove: (android.net.Uri) -> Unit) {
     val thumbnail by produceState<Bitmap?>(null, item.uri) {
         value = runCatching { context.contentResolver.loadThumbnail(item.uri, Size(240, 240), null) }.getOrNull()
     }
+    val displayName by produceState<String?>(null, item.uri) {
+        value = runCatching {
+            context.contentResolver.query(
+                item.uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull()
+    }
 
     SectionCard(Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(
                 shape = MaterialTheme.shapes.small,
-                modifier = Modifier.size(72.dp),
+                modifier = Modifier.size(64.dp),
                 border = BorderStroke(1.dp, thumbnailOutline),
                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
             ) {
@@ -370,26 +390,31 @@ private fun QueueCard(item: QueueItem, onRemove: (android.net.Uri) -> Unit) {
 
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
-                    item.uri.lastPathSegment ?: "图片",
-                    maxLines = 2,
+                    displayName ?: "截图",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                Text(
-                    when (item.status) {
-                        QueueStatus.READY -> "等待处理"
-                        QueueStatus.PROCESSING -> "处理中…"
-                        QueueStatus.DONE -> item.message ?: "已完成"
-                        QueueStatus.ERROR -> item.message ?: "处理失败，请重试"
-                    },
-                    color = if (item.status == QueueStatus.ERROR) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                if (item.hdr) HdrBadge()
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        when (item.status) {
+                            QueueStatus.READY -> "待处理"
+                            QueueStatus.PROCESSING -> "处理中…"
+                            QueueStatus.DONE -> item.message ?: "已完成"
+                            QueueStatus.ERROR -> item.message ?: "处理失败"
+                        },
+                        color = if (item.status == QueueStatus.ERROR) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (item.hdr) HdrBadge()
+                }
             }
 
             if (item.status == QueueStatus.PROCESSING) {
@@ -398,7 +423,9 @@ private fun QueueCard(item: QueueItem, onRemove: (android.net.Uri) -> Unit) {
                     strokeWidth = 2.dp,
                 )
             } else {
-                TextButton(onClick = { onRemove(item.uri) }) { Text("移除") }
+                IconButton(onClick = { onRemove(item.uri) }) {
+                    Icon(Icons.Filled.Close, contentDescription = "移除")
+                }
             }
         }
     }
@@ -423,20 +450,28 @@ private fun HdrBadge() {
 @Composable
 private fun QueueSummary(queue: List<QueueItem>, modifier: Modifier = Modifier) {
     SectionCard(modifier) {
-        Text("批处理", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text("${queue.size} 张", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(12.dp))
-        SummaryLine("总计", queue.size.toString())
+        SummaryLine("待处理", queue.count { it.status == QueueStatus.READY }.toString())
+        SummaryLine("处理中", queue.count { it.status == QueueStatus.PROCESSING }.toString())
         SummaryLine("已完成", queue.count { it.status == QueueStatus.DONE }.toString())
-        SummaryLine("HDR", queue.count { it.hdr }.toString())
-        SummaryLine("失败", queue.count { it.status == QueueStatus.ERROR }.toString())
+        val failed = queue.count { it.status == QueueStatus.ERROR }
+        if (failed > 0) SummaryLine("失败", failed.toString(), error = true)
     }
 }
 
 @Composable
-private fun SummaryLine(label: String, value: String) {
+private fun SummaryLine(label: String, value: String, error: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.SemiBold)
+        Text(
+            label,
+            color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            value,
+            fontWeight = FontWeight.SemiBold,
+            color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -467,7 +502,7 @@ private fun CalibrationHomeScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) {
-                    Text("删除校准数据")
+                    Text("删除")
                 }
             },
             dismissButton = {
@@ -480,17 +515,19 @@ private fun CalibrationHomeScreen(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { PageHeader("校准", "分别校准竖屏、横屏与 HDR") }
-        item {
-            CaptureAccessCard(
-                mediaAccess = mediaAccess,
-                onRequestFullAccess = onRequestFullAccess,
-            )
+        item { PageHeader("校准") }
+        if (mediaAccess != PhotoLibraryAccess.FULL) {
+            item {
+                CaptureAccessCard(
+                    mediaAccess = mediaAccess,
+                    onRequestFullAccess = onRequestFullAccess,
+                )
+            }
         }
         item {
             CalibrationGroup(
                 title = "SDR",
-                subtitle = "6 张灰阶截图",
+                subtitle = "每个方向 6 张",
                 portraitTarget = portraitSdr,
                 landscapeTarget = landscapeSdr,
                 calibratedTargets = state.calibratedTargets,
@@ -500,7 +537,7 @@ private fun CalibrationHomeScreen(
         item {
             CalibrationGroup(
                 title = "HDR / P3",
-                subtitle = "6 张 HDR / P3 灰阶截图",
+                subtitle = "每个方向 6 张",
                 portraitTarget = portraitHdr,
                 landscapeTarget = landscapeHdr,
                 calibratedTargets = state.calibratedTargets,
@@ -537,17 +574,15 @@ private fun CaptureAccessCard(
         Text("自动获取截图", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
         Text(
-            when (mediaAccess) {
-                PhotoLibraryAccess.FULL -> "已开启。截图后会自动进入下一步。"
-                PhotoLibraryAccess.PARTIAL -> "需要完整照片访问；否则会打开照片选择器。"
-                PhotoLibraryAccess.NONE -> "未授权时会打开照片选择器。"
+            if (mediaAccess == PhotoLibraryAccess.PARTIAL) {
+                "需要完整照片访问，才能自动读取刚截的图。"
+            } else {
+                "允许照片访问后，截图会自动进入下一步。"
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (mediaAccess != PhotoLibraryAccess.FULL) {
-            Spacer(Modifier.height(12.dp))
-            FilledTonalButton(onClick = onRequestFullAccess) { Text("允许自动获取") }
-        }
+        Spacer(Modifier.height(12.dp))
+        FilledTonalButton(onClick = onRequestFullAccess) { Text("允许") }
     }
 }
 
@@ -560,23 +595,55 @@ private fun CalibrationGroup(
     calibratedTargets: Set<CalibrationTarget>,
     onStart: (CalibrationTarget) -> Unit,
 ) {
+    val completed = listOf(portraitTarget, landscapeTarget).count { it in calibratedTargets }
     SectionCard(Modifier.fillMaxWidth()) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                "已完成 $completed/2",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FilledTonalButton(
+            CalibrationTargetButton(
+                label = "竖屏",
+                calibrated = portraitTarget in calibratedTargets,
                 onClick = { onStart(portraitTarget) },
                 modifier = Modifier.weight(1f),
-            ) {
-                Text(if (portraitTarget in calibratedTargets) "重新校准竖屏" else "校准竖屏")
-            }
-            FilledTonalButton(
+            )
+            CalibrationTargetButton(
+                label = "横屏",
+                calibrated = landscapeTarget in calibratedTargets,
                 onClick = { onStart(landscapeTarget) },
                 modifier = Modifier.weight(1f),
-            ) {
-                Text(if (landscapeTarget in calibratedTargets) "重新校准横屏" else "校准横屏")
-            }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalibrationTargetButton(
+    label: String,
+    calibrated: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (calibrated) {
+        OutlinedButton(onClick = onClick, modifier = modifier) {
+            Text("$label 已校准")
+        }
+    } else {
+        FilledTonalButton(onClick = onClick, modifier = modifier) {
+            Text("校准$label")
         }
     }
 }
@@ -593,7 +660,7 @@ private fun SettingsScreen(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { PageHeader("设置", "输出与画质") }
+        item { PageHeader("设置") }
         item {
             SectionCard(Modifier.fillMaxWidth()) {
                 Text("保存位置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -605,12 +672,13 @@ private fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalButton(onClick = onChooseOutput) { Text("选择文件夹") }
                     if (state.outputTree != null) {
-                        TextButton(onClick = onDefaultOutput) { Text("使用默认位置") }
+                        TextButton(onClick = onDefaultOutput) { Text("恢复默认") }
                     }
                 }
-
-                Spacer(Modifier.height(22.dp))
-
+            }
+        }
+        item {
+            SectionCard(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("JPEG 质量", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("Q${state.jpegQuality}", fontWeight = FontWeight.SemiBold)
@@ -621,10 +689,7 @@ private fun SettingsScreen(
                     valueRange = 70f..100f,
                     steps = 29,
                 )
-                Text(
-                    "默认 Q90；压缩也用于减弱残余水印。",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("推荐 Q90", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
@@ -639,11 +704,8 @@ private fun SettingsScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("清理 Ultra HDR 增益图", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "对带增益图的图片同时处理 HDR 层。",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text("Ultra HDR 增益图", fontWeight = FontWeight.SemiBold)
+                        Text("同时清理增益图", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = state.cleanHdrGainMap, onCheckedChange = null)
                 }
@@ -676,9 +738,9 @@ private fun CalibrationCaptureScreen(
         }
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
             SectionCard(Modifier.padding(24.dp)) {
-                Text("正在拟合模型", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text("正在完成校准", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
-                Text(calibration.message ?: "正在分析 6 张截图…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(calibration.message ?: "正在分析截图…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         return
@@ -711,7 +773,7 @@ private fun CalibrationCaptureScreen(
                             }
                             delay(250)
                         }
-                        onMessage("未能自动读取刚才的截图，请在照片选择器中选择它。")
+                        onMessage("没有找到刚才的截图，请手动选择。")
                         onNeedPicker()
                     } else {
                         onNeedPicker()
@@ -773,17 +835,8 @@ private fun HdrFlatCalibrationFrame(level: Int) {
 }
 
 @Composable
-private fun PageHeader(title: String, subtitle: String? = null) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        if (!subtitle.isNullOrBlank()) {
-            Text(
-                subtitle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-    }
+private fun PageHeader(title: String) {
+    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
