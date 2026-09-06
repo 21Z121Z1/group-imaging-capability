@@ -76,7 +76,25 @@ jobs:
             adb shell monkey -p io.github.z121z1.watermarkcleaner -c android.intent.category.LAUNCHER 1
             sleep 3
             mkdir -p app/build/verification-screenshots
+
+            # Compact phone surfaces: home, calibration and settings.
             adb exec-out screencap -p > app/build/verification-screenshots/home.png
+            adb shell input tap 160 550
+            sleep 1
+            adb exec-out screencap -p > app/build/verification-screenshots/calibration.png
+            adb shell input tap 266 550
+            sleep 1
+            adb exec-out screencap -p > app/build/verification-screenshots/settings.png
+
+            # Stress the adaptive layout with an expanded landscape viewport.
+            adb shell wm size 1280x800
+            adb shell wm density 160
+            adb shell am force-stop io.github.z121z1.watermarkcleaner
+            adb shell monkey -p io.github.z121z1.watermarkcleaner -c android.intent.category.LAUNCHER 1
+            sleep 3
+            adb exec-out screencap -p > app/build/verification-screenshots/home-expanded.png
+            adb shell wm size reset
+            adb shell wm density reset
       - uses: actions/upload-artifact@v4
         if: always()
         with:
