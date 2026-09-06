@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.z121z1.watermarkcleaner.core.CalibrationEngine
@@ -11,7 +12,6 @@ import io.github.z121z1.watermarkcleaner.core.CalibrationOrientation
 import io.github.z121z1.watermarkcleaner.core.CalibrationTarget
 import io.github.z121z1.watermarkcleaner.core.DynamicRange
 import io.github.z121z1.watermarkcleaner.core.GainMapCalibrationEngine
-import io.github.z121z1.watermarkcleaner.core.GainMapMode
 import io.github.z121z1.watermarkcleaner.core.ProfileRepository
 import io.github.z121z1.watermarkcleaner.core.WatermarkProcessor
 import io.github.z121z1.watermarkcleaner.data.AppSettings
@@ -57,6 +57,10 @@ data class UiState(
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        private const val TAG = "WatermarkCleaner"
+    }
+
     private val context = application.applicationContext
     private val profiles = ProfileRepository(context)
     private val settings = AppSettings(context)
@@ -103,17 +107,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     } finally {
                         result.bitmap.recycle()
                     }
-                    val message = when (result.gainMapMode) {
-                        GainMapMode.CALIBRATED -> "HDR 已保留 · gain map 使用独立校准模型"
-                        GainMapMode.LOCAL_FALLBACK -> "HDR 已保留 · gain map 使用局部回退"
-                        GainMapMode.NONE -> if (result.wasHdr) "HDR / P3 截图链路已保留" else "已保存"
-                    }
                     updateQueue(target.uri) {
-                        it.copy(status = QueueStatus.DONE, output = output, hdr = result.wasHdr, message = message)
+                        it.copy(
+                            status = QueueStatus.DONE,
+                            output = output,
+                            hdr = result.wasHdr,
+                            message = "已保存",
+                        )
                     }
                 } catch (t: Throwable) {
+                    Log.w(TAG, "Processing failed for ${target.uri}", t)
                     updateQueue(target.uri) {
-                        it.copy(status = QueueStatus.ERROR, message = t.message ?: t::class.java.simpleName)
+                        it.copy(status = QueueStatus.ERROR, message = processErrorMessage(t))
                     }
                 }
             }
@@ -186,11 +191,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(
             calibration = snapshot.copy(
                 fitting = true,
-                message = if (target.dynamicRange == DynamicRange.HDR) {
-                    "正在拟合 HDR / P3 截图主图模型；若截图容器自身带 gain map，再额外拟合增益图…"
-                } else {
-                    "正在拟合逐像素模型…"
-                },
+                message = "正在分析截图…",
             ),
         )
         viewModelScope.launch {
@@ -216,22 +217,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     profiles.saveBase(target.dynamicRange, baseProfile)
                 }
-                val gainSummary = when {
-                    gainProfile != null -> "，gain map ${gainProfile.pixels.size} 个验证像素"
-                    target.dynamicRange == DynamicRange.HDR -> "，ColorOS 截图为扁平 HDR/P3（文件无 gain map）"
-                    else -> ""
-                }
                 _state.value = _state.value.copy(
                     modelReady = true,
                     calibratedTargets = profiles.calibratedTargets(),
                     calibration = CalibrationState(
                         active = false,
-                        message = "${target.label} 校准完成：${baseProfile.width}×${baseProfile.height}，base ${baseProfile.pixels.size} 个稳定水印像素$gainSummary。再次点同类型校准会优先进入尚未完成的另一个方向。",
+                        message = "${target.label} 校准完成",
                     ),
                 )
             } catch (t: Throwable) {
+                Log.w(TAG, "Calibration failed for ${target.label}", t)
                 _state.value = _state.value.copy(
-                    calibration = snapshot.copy(fitting = false, message = t.message ?: "校准失败"),
+                    calibration = snapshot.copy(
+                        fitting = false,
+                        message = calibrationErrorMessage(t),
+                    ),
                 )
             }
         }
@@ -266,6 +266,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun resetModels() {
         profiles.clear()
         _state.value = _state.value.copy(modelReady = false, calibratedTargets = emptySet())
+    }
+
+    private fun processErrorMessage(t: Throwable): String {
+        val message = t.message.orEmpty()
+        return when {
+            message.contains("校准模型") -> "缺少与这张截图匹配的校准，请先完成对应方向的校准。"
+            message.contains("清理 HDR gain map") -> "请在设置中开启“清理 Ultra HDR 增益图”后重试。"
+            message.contains("HDR_TO_SDR") -> "暂不支持这种 Ultra HDR 图片。"
+            message.contains("gain map", ignoreCase = true) && message.contains("未得到") ->
+                "当前无法安全处理这张 Ultra HDR 图片。"
+            message.contains("gain map", ignoreCase = true) &&
+                (message.contains("尺寸已变化") || message.contains("通道布局已变化")) ->
+                "这张 Ultra HDR 图片与当前校准不匹配，请重新完成对应方向的 HDR 校准。"
+            message.contains("无法解码") -> "无法读取这张图片。"
+            message.contains("无法创建") -> "无法处理这张图片。"
+            else -> "处理失败，请重试。"
+        }
+    }
+
+    private fun calibrationErrorMessage(t: Throwable): String {
+        val message = t.message.orEmpty()
+        return when {
+            message.contains("identical dimensions") -> "6 张截图尺寸不一致，请重新校准。"
+            message.contains("No verified OPlus beta watermark pixels found") ->
+                "没有检测到可验证的系统水印，请重新截取 6 张灰阶截图。"
+            message.contains("Unable to decode") ||
+                message.contains("Unsupported calibration image") ||
+                message.contains("Unable to open") ->
+                "无法读取校准截图，请重新选择。"
+            message.startsWith("截图方向与") -> "截图方向不一致，请按当前方向重新校准。"
+            else -> "校准失败，请重新截取 6 张截图。"
+        }
     }
 
     private fun updateQueue(uri: Uri, transform: (QueueItem) -> QueueItem) {
