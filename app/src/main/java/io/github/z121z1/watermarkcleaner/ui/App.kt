@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -259,48 +260,54 @@ private fun ProcessScreen(
     val actionableCount = state.queue.count { it.status == QueueStatus.READY || it.status == QueueStatus.ERROR }
     val hasFinished = state.queue.any { it.status == QueueStatus.DONE }
 
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        PageHeader("截图去水印")
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            Modifier
+                .widthIn(max = 1040.dp)
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            PageHeader("截图去水印")
 
-        if (state.queue.isEmpty()) {
-            EmptyProcessCard(
-                modelReady = state.modelReady,
-                onPick = onPick,
-                onOpenCalibration = onOpenCalibration,
-            )
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(onClick = onPick, modifier = Modifier.weight(1f)) {
-                    Text("添加截图")
-                }
-                Button(
-                    onClick = onProcess,
-                    enabled = state.modelReady && actionableCount > 0,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(if (actionableCount > 0) "处理 $actionableCount 张" else "处理截图")
-                }
-            }
-            if (hasFinished) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onClearFinished) { Text("清除已完成") }
-                }
-            }
-
-            if (twoPane) {
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                    QueueList(
-                        queue = state.queue,
-                        onRemove = onRemove,
-                        modifier = Modifier.weight(0.62f).fillMaxHeight(),
-                    )
-                    QueueSummary(state.queue, Modifier.weight(0.38f).fillMaxHeight())
-                }
+            if (state.queue.isEmpty()) {
+                EmptyProcessCard(
+                    modelReady = state.modelReady,
+                    onPick = onPick,
+                    onOpenCalibration = onOpenCalibration,
+                )
             } else {
-                QueueList(queue = state.queue, onRemove = onRemove, modifier = Modifier.fillMaxSize())
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilledTonalButton(onClick = onPick, modifier = Modifier.weight(1f)) {
+                        Text("添加截图")
+                    }
+                    Button(
+                        onClick = onProcess,
+                        enabled = state.modelReady && actionableCount > 0,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(if (actionableCount > 0) "处理 $actionableCount 张" else "处理截图")
+                    }
+                }
+                if (hasFinished) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onClearFinished) { Text("清除已完成") }
+                    }
+                }
+
+                if (twoPane) {
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        QueueList(
+                            queue = state.queue,
+                            onRemove = onRemove,
+                            modifier = Modifier.weight(0.62f).fillMaxHeight(),
+                        )
+                        QueueSummary(state.queue, Modifier.weight(0.38f).fillMaxHeight())
+                    }
+                } else {
+                    QueueList(queue = state.queue, onRemove = onRemove, modifier = Modifier.fillMaxSize())
+                }
             }
         }
     }
@@ -312,7 +319,11 @@ private fun EmptyProcessCard(
     onPick: () -> Unit,
     onOpenCalibration: () -> Unit,
 ) {
-    SectionCard(Modifier.fillMaxWidth()) {
+    SectionCard(
+        Modifier
+            .widthIn(max = 640.dp)
+            .fillMaxWidth(),
+    ) {
         Text(
             if (modelReady) "还没有截图" else "需要先校准",
             style = MaterialTheme.typography.titleLarge,
@@ -517,57 +528,63 @@ private fun CalibrationHomeScreen(
         )
     }
 
-    LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item { PageHeader("校准") }
-        if (mediaAccess != PhotoLibraryAccess.FULL) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            Modifier
+                .widthIn(max = 720.dp)
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item { PageHeader("校准") }
+            if (mediaAccess != PhotoLibraryAccess.FULL) {
+                item {
+                    CaptureAccessCard(
+                        mediaAccess = mediaAccess,
+                        onRequestFullAccess = onRequestFullAccess,
+                    )
+                }
+            }
             item {
-                CaptureAccessCard(
-                    mediaAccess = mediaAccess,
-                    onRequestFullAccess = onRequestFullAccess,
+                CalibrationGroup(
+                    title = "SDR",
+                    subtitle = "每个方向 6 张",
+                    portraitTarget = portraitSdr,
+                    landscapeTarget = landscapeSdr,
+                    calibratedTargets = state.calibratedTargets,
+                    onStart = onStart,
                 )
             }
-        }
-        item {
-            CalibrationGroup(
-                title = "SDR",
-                subtitle = "每个方向 6 张",
-                portraitTarget = portraitSdr,
-                landscapeTarget = landscapeSdr,
-                calibratedTargets = state.calibratedTargets,
-                onStart = onStart,
-            )
-        }
-        item {
-            CalibrationGroup(
-                title = "HDR / P3",
-                subtitle = "每个方向 6 张",
-                portraitTarget = portraitHdr,
-                landscapeTarget = landscapeHdr,
-                calibratedTargets = state.calibratedTargets,
-                onStart = onStart,
-            )
-        }
-        if (state.calibration.message != null) {
             item {
-                SectionCard(Modifier.fillMaxWidth()) {
-                    Text(state.calibration.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                CalibrationGroup(
+                    title = "HDR / P3",
+                    subtitle = "每个方向 6 张",
+                    portraitTarget = portraitHdr,
+                    landscapeTarget = landscapeHdr,
+                    calibratedTargets = state.calibratedTargets,
+                    onStart = onStart,
+                )
+            }
+            if (state.calibration.message != null) {
+                item {
+                    SectionCard(Modifier.fillMaxWidth()) {
+                        Text(state.calibration.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
-        }
-        if (state.modelReady) {
-            item {
-                TextButton(
-                    onClick = { confirmReset = true },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    Text("删除全部校准数据")
+            if (state.modelReady) {
+                item {
+                    TextButton(
+                        onClick = { confirmReset = true },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Text("删除全部校准数据")
+                    }
                 }
             }
+            item { Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp)) }
         }
-        item { Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp)) }
     }
 }
 
@@ -662,63 +679,69 @@ private fun SettingsScreen(
     onQuality: (Int) -> Unit,
     onCleanHdr: (Boolean) -> Unit,
 ) {
-    LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item { PageHeader("设置") }
-        item {
-            SectionCard(Modifier.fillMaxWidth()) {
-                Text("保存位置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (state.outputTree == null) "Pictures/截图去水印" else "自定义文件夹",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FilledTonalButton(onClick = onChooseOutput) { Text("选择文件夹") }
-                    if (state.outputTree != null) {
-                        TextButton(onClick = onDefaultOutput) { Text("恢复默认位置") }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            Modifier
+                .widthIn(max = 720.dp)
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item { PageHeader("设置") }
+            item {
+                SectionCard(Modifier.fillMaxWidth()) {
+                    Text("保存位置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (state.outputTree == null) "Pictures/截图去水印" else "自定义文件夹",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalButton(onClick = onChooseOutput) { Text("选择文件夹") }
+                        if (state.outputTree != null) {
+                            TextButton(onClick = onDefaultOutput) { Text("恢复默认位置") }
+                        }
                     }
                 }
             }
-        }
-        item {
-            SectionCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("JPEG 质量", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("Q${state.jpegQuality}", fontWeight = FontWeight.SemiBold)
-                }
-                Slider(
-                    value = state.jpegQuality.toFloat(),
-                    onValueChange = { onQuality(it.toInt()) },
-                    valueRange = 70f..100f,
-                    steps = 29,
-                )
-                Text("推荐 Q90", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        item {
-            SectionCard(
-                Modifier
-                    .fillMaxWidth()
-                    .toggleable(
-                        value = state.cleanHdrGainMap,
-                        role = Role.Switch,
-                        onValueChange = onCleanHdr,
-                    ),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "清理 Ultra HDR 增益图",
-                        modifier = Modifier.weight(1f),
-                        fontWeight = FontWeight.SemiBold,
+            item {
+                SectionCard(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("JPEG 质量", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Q${state.jpegQuality}", fontWeight = FontWeight.SemiBold)
+                    }
+                    Slider(
+                        value = state.jpegQuality.toFloat(),
+                        onValueChange = { onQuality(it.toInt()) },
+                        valueRange = 70f..100f,
+                        steps = 29,
                     )
-                    Switch(checked = state.cleanHdrGainMap, onCheckedChange = null)
+                    Text("推荐 Q90", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            item {
+                SectionCard(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = state.cleanHdrGainMap,
+                            role = Role.Switch,
+                            onValueChange = onCleanHdr,
+                        ),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "清理 Ultra HDR 增益图",
+                            modifier = Modifier.weight(1f),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Switch(checked = state.cleanHdrGainMap, onCheckedChange = null)
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp)) }
         }
-        item { Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp)) }
     }
 }
 
