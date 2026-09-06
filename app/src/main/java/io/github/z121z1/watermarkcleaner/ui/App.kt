@@ -107,8 +107,10 @@ import io.github.z121z1.watermarkcleaner.core.HdrProbeFactory
 import io.github.z121z1.watermarkcleaner.core.HdrProbePattern
 import io.github.z121z1.watermarkcleaner.data.PhotoLibraryAccess
 import io.github.z121z1.watermarkcleaner.data.ScreenshotMediaFinder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class Destination(
     val label: String,
@@ -270,7 +272,7 @@ private fun ProcessScreen(
                 onOpenCalibration = onOpenCalibration,
             )
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilledTonalButton(onClick = onPick, modifier = Modifier.weight(1f)) {
                     Text("添加截图")
                 }
@@ -279,7 +281,7 @@ private fun ProcessScreen(
                     enabled = state.modelReady && actionableCount > 0,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(if (actionableCount > 0) "处理 $actionableCount 张" else "没有待处理")
+                    Text(if (actionableCount > 0) "处理 $actionableCount 张" else "处理截图")
                 }
             }
             if (hasFinished) {
@@ -312,7 +314,7 @@ private fun EmptyProcessCard(
 ) {
     SectionCard(Modifier.fillMaxWidth()) {
         Text(
-            if (modelReady) "选择截图" else "先校准一次",
+            if (modelReady) "还没有截图" else "需要先校准",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
         )
@@ -352,20 +354,24 @@ private fun QueueCard(item: QueueItem, onRemove: (android.net.Uri) -> Unit) {
     val dark = isSystemInDarkTheme()
     val thumbnailOutline = if (dark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.10f)
     val thumbnail by produceState<Bitmap?>(null, item.uri) {
-        value = runCatching { context.contentResolver.loadThumbnail(item.uri, Size(240, 240), null) }.getOrNull()
+        value = withContext(Dispatchers.IO) {
+            runCatching { context.contentResolver.loadThumbnail(item.uri, Size(240, 240), null) }.getOrNull()
+        }
     }
     val displayName by produceState<String?>(null, item.uri) {
-        value = runCatching {
-            context.contentResolver.query(
-                item.uri,
-                arrayOf(OpenableColumns.DISPLAY_NAME),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else null
-            }
-        }.getOrNull()
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver.query(
+                    item.uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+            }.getOrNull()
+        }
     }
 
     SectionCard(Modifier.fillMaxWidth()) {
@@ -424,7 +430,7 @@ private fun QueueCard(item: QueueItem, onRemove: (android.net.Uri) -> Unit) {
                 )
             } else {
                 IconButton(onClick = { onRemove(item.uri) }) {
-                    Icon(Icons.Filled.Close, contentDescription = "移除")
+                    Icon(Icons.Filled.Close, contentDescription = "移除 ${displayName ?: "截图"}")
                 }
             }
         }
@@ -502,7 +508,7 @@ private fun CalibrationHomeScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) {
-                    Text("删除")
+                    Text("删除校准数据")
                 }
             },
             dismissButton = {
@@ -582,7 +588,7 @@ private fun CaptureAccessCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(12.dp))
-        FilledTonalButton(onClick = onRequestFullAccess) { Text("允许") }
+        FilledTonalButton(onClick = onRequestFullAccess) { Text("允许照片访问") }
     }
 }
 
@@ -613,7 +619,7 @@ private fun CalibrationGroup(
             )
         }
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CalibrationTargetButton(
                 label = "竖屏",
                 calibrated = portraitTarget in calibratedTargets,
@@ -639,7 +645,7 @@ private fun CalibrationTargetButton(
 ) {
     if (calibrated) {
         OutlinedButton(onClick = onClick, modifier = modifier) {
-            Text("$label 已校准")
+            Text("重新校准$label")
         }
     } else {
         FilledTonalButton(onClick = onClick, modifier = modifier) {
@@ -672,7 +678,7 @@ private fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalButton(onClick = onChooseOutput) { Text("选择文件夹") }
                     if (state.outputTree != null) {
-                        TextButton(onClick = onDefaultOutput) { Text("恢复默认") }
+                        TextButton(onClick = onDefaultOutput) { Text("恢复默认位置") }
                     }
                 }
             }
@@ -703,10 +709,11 @@ private fun SettingsScreen(
                     ),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Ultra HDR 增益图", fontWeight = FontWeight.SemiBold)
-                        Text("同时清理增益图", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Text(
+                        "清理 Ultra HDR 增益图",
+                        modifier = Modifier.weight(1f),
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     Switch(checked = state.cleanHdrGainMap, onCheckedChange = null)
                 }
             }
