@@ -6,15 +6,19 @@ import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import kotlin.io.path.createTempDirectory
 
 class WatermarkProfileCodecTest {
     private val profile = WatermarkProfile(
-        4,
-        3,
-        listOf(
-            AffinePixel(1, .94f, .95f, .96f, 10f, 9f, 8f),
-            AffinePixel(7, .90f, .91f, .92f, 14f, 13f, 12f),
+        width = 4,
+        height = 3,
+        pixels = listOf(
+            CompositePixel(1, BlendSpace.ENCODED_SRGB, .94f, .95f, .96f, .02f, .018f, .016f, .40f),
+            CompositePixel(7, BlendSpace.LINEAR_SRGB, .90f, .91f, .92f, .03f, .028f, .026f, .60f),
         ),
+        calibrationLevels = 6,
+        calibrationRmse = .24f,
+        validationMaxError = .60f,
     )
 
     @Test
@@ -49,9 +53,9 @@ class WatermarkProfileCodecTest {
 
     @Test
     fun atomicWrite_publishesOnlyValidatedProfile() {
-        val dir = createTempDir(prefix = "wmr2-")
+        val dir = createTempDirectory("wmr3-").toFile()
         try {
-            val file = File(dir, "primary.wmr2")
+            val file = File(dir, "primary.wmr3")
             WatermarkProfileCodec.writeAtomically(profile, file)
             assertEquals(profile, file.inputStream().use(WatermarkProfileCodec::read))
             assertEquals(emptyList<String>(), dir.listFiles()!!.filter { it.name.startsWith(".primary") }.map { it.name })

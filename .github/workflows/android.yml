@@ -25,8 +25,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - name: Install Android 37 platform
-        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37" "platform-tools"
+      - name: Install Android 17 platform
+        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37.0" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
@@ -53,8 +53,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - name: Install Android build platform
-        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37" "platform-tools"
+      - name: Install Android 17 build platform
+        run: yes | sdkmanager --licenses >/dev/null && sdkmanager "platforms;android-37.0" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
@@ -67,7 +67,6 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          profile: pixel_8
           disable-animations: true
           script: |
             gradle --stacktrace --console=plain :app:connectedDebugAndroidTest
@@ -77,7 +76,31 @@ jobs:
             adb shell monkey -p io.github.z121z1.watermarkcleaner -c android.intent.category.LAUNCHER 1
             sleep 3
             mkdir -p app/build/verification-screenshots
+
+            # Compact phone surfaces: home, calibration and settings.
             adb exec-out screencap -p > app/build/verification-screenshots/home.png
+            adb shell input tap 160 550
+            sleep 1
+            adb exec-out screencap -p > app/build/verification-screenshots/calibration.png
+            adb shell input tap 266 550
+            sleep 1
+            adb exec-out screencap -p > app/build/verification-screenshots/settings.png
+
+            # Stress the adaptive layout with an expanded landscape viewport.
+            adb shell wm size 1280x800
+            adb shell wm density 160
+            adb shell am force-stop io.github.z121z1.watermarkcleaner
+            adb shell monkey -p io.github.z121z1.watermarkcleaner -c android.intent.category.LAUNCHER 1
+            sleep 3
+            adb exec-out screencap -p > app/build/verification-screenshots/home-expanded.png
+            adb shell input tap 48 158
+            sleep 1
+            adb exec-out screencap -p > app/build/verification-screenshots/calibration-expanded.png
+            adb shell input tap 48 225
+            sleep 1
+            adb exec-out screencap -p > app/build/verification-screenshots/settings-expanded.png
+            adb shell wm size reset
+            adb shell wm density reset
       - uses: actions/upload-artifact@v4
         if: always()
         with:

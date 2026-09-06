@@ -1,10 +1,17 @@
 package io.github.z121z1.watermarkcleaner
 
 import android.app.Application
+import android.content.res.Configuration
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.z121z1.watermarkcleaner.core.CalibrationEngine
+import io.github.z121z1.watermarkcleaner.core.CalibrationOrientation
+import io.github.z121z1.watermarkcleaner.core.CalibrationTarget
+import io.github.z121z1.watermarkcleaner.core.DynamicRange
+import io.github.z121z1.watermarkcleaner.core.GainMapCalibrationEngine
 import io.github.z121z1.watermarkcleaner.core.ProfileRepository
 import io.github.z121z1.watermarkcleaner.core.WatermarkProcessor
 import io.github.z121z1.watermarkcleaner.data.AppSettings
@@ -28,12 +35,13 @@ enum class QueueStatus { READY, PROCESSING, DONE, ERROR }
 
 data class CalibrationState(
     val active: Boolean = false,
-    val hdr: Boolean = false,
+    val target: CalibrationTarget? = null,
     val samples: List<Uri> = emptyList(),
     val pickerRequested: Boolean = false,
     val fitting: Boolean = false,
     val message: String? = null,
 ) {
+    val hdr: Boolean get() = target?.dynamicRange == DynamicRange.HDR
     val levelIndex: Int get() = samples.size.coerceAtMost(CalibrationEngine.LEVELS.lastIndex)
     val complete: Boolean get() = samples.size == CalibrationEngine.LEVELS.size
 }
@@ -42,22 +50,29 @@ data class UiState(
     val queue: List<QueueItem> = emptyList(),
     val calibration: CalibrationState = CalibrationState(),
     val modelReady: Boolean = false,
+    val calibratedTargets: Set<CalibrationTarget> = emptySet(),
     val outputTree: Uri? = null,
     val jpegQuality: Int = 90,
     val cleanHdrGainMap: Boolean = true,
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        private const val TAG = "WatermarkCleaner"
+    }
+
     private val context = application.applicationContext
     private val profiles = ProfileRepository(context)
     private val settings = AppSettings(context)
     private val processor = WatermarkProcessor(context.contentResolver, profiles)
     private val exporter = ImageExporter(context.contentResolver, settings)
     private val calibrationEngine = CalibrationEngine(context.contentResolver)
+    private val gainMapCalibrationEngine = GainMapCalibrationEngine(context.contentResolver)
 
     private val _state = MutableStateFlow(
         UiState(
-            modelReady = profiles.hasPrimary(),
+            modelReady = profiles.hasAnyBase(),
+            calibratedTargets = profiles.calibratedTargets(),
             outputTree = settings.outputTree,
             jpegQuality = settings.jpegQuality,
             cleanHdrGainMap = settings.cleanHdrGainMap,
@@ -97,22 +112,49 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             status = QueueStatus.DONE,
                             output = output,
                             hdr = result.wasHdr,
-                            message = if (result.wasHdr) "Ultra HDR 已保留" else "已保存",
+                            message = "已保存",
                         )
                     }
                 } catch (t: Throwable) {
+                    Log.w(TAG, "Processing failed for ${target.uri}", t)
                     updateQueue(target.uri) {
-                        it.copy(status = QueueStatus.ERROR, message = t.message ?: t::class.java.simpleName)
+                        it.copy(status = QueueStatus.ERROR, message = processErrorMessage(t))
                     }
                 }
             }
         }
     }
 
+    /**
+     * The original MD3 screen exposes one button per dynamic range. Prefer the current orientation,
+     * but once that slot is calibrated automatically select the still-missing orientation. This
+     * makes the second run enter the independent landscape profile even when auto-rotate is locked.
+     */
     fun startCalibration(hdr: Boolean) {
-        _state.value = _state.value.copy(
-            calibration = CalibrationState(active = true, hdr = hdr),
-        )
+        val range = if (hdr) DynamicRange.HDR else DynamicRange.SDR
+        val preferred = if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            CalibrationOrientation.LANDSCAPE
+        } else {
+            CalibrationOrientation.PORTRAIT
+        }
+        val calibrated = profiles.calibratedTargets()
+        val preferredTarget = CalibrationTarget(preferred, range)
+        val otherOrientation = if (preferred == CalibrationOrientation.PORTRAIT) {
+            CalibrationOrientation.LANDSCAPE
+        } else {
+            CalibrationOrientation.PORTRAIT
+        }
+        val otherTarget = CalibrationTarget(otherOrientation, range)
+        val target = when {
+            preferredTarget !in calibrated -> preferredTarget
+            otherTarget !in calibrated -> otherTarget
+            else -> preferredTarget
+        }
+        startCalibration(target)
+    }
+
+    fun startCalibration(target: CalibrationTarget) {
+        _state.value = _state.value.copy(calibration = CalibrationState(active = true, target = target))
     }
 
     fun cancelCalibration() {
@@ -144,24 +186,65 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun fitCalibration() {
         val snapshot = _state.value.calibration
+        val target = snapshot.target ?: return
         if (!snapshot.complete || snapshot.fitting) return
-        _state.value = _state.value.copy(calibration = snapshot.copy(fitting = true, message = "正在拟合逐像素模型…"))
+        _state.value = _state.value.copy(
+            calibration = snapshot.copy(
+                fitting = true,
+                message = "正在分析截图…",
+            ),
+        )
         viewModelScope.launch {
             try {
-                val profile = calibrationEngine.fit(snapshot.samples)
-                withContext(Dispatchers.IO) { profiles.savePrimary(profile) }
+                val baseProfile = calibrationEngine.fit(snapshot.samples)
+                require(target.orientation.matches(baseProfile.width, baseProfile.height)) {
+                    "截图方向与 ${target.orientation.label} 校准目标不一致：${baseProfile.width}×${baseProfile.height}"
+                }
+
+                val hasGainMap = target.dynamicRange == DynamicRange.HDR && sampleHasGainMap(snapshot.samples.first())
+                val gainProfile = if (hasGainMap) {
+                    gainMapCalibrationEngine.fit(snapshot.samples).also {
+                        require(it.baseWidth == baseProfile.width && it.baseHeight == baseProfile.height)
+                    }
+                } else {
+                    null
+                }
+
+                withContext(Dispatchers.IO) {
+                    if (target.dynamicRange == DynamicRange.HDR) {
+                        if (gainProfile != null) profiles.saveHdrGain(gainProfile)
+                        else profiles.deleteHdrGain(baseProfile.width, baseProfile.height)
+                    }
+                    profiles.saveBase(target.dynamicRange, baseProfile)
+                }
                 _state.value = _state.value.copy(
                     modelReady = true,
+                    calibratedTargets = profiles.calibratedTargets(),
                     calibration = CalibrationState(
                         active = false,
-                        message = "校准完成：${profile.width}×${profile.height}，${profile.pixels.size} 个稳定水印像素",
+                        message = "${target.label} 校准完成",
                     ),
                 )
             } catch (t: Throwable) {
+                Log.w(TAG, "Calibration failed for ${target.label}", t)
                 _state.value = _state.value.copy(
-                    calibration = snapshot.copy(fitting = false, message = t.message ?: "校准失败"),
+                    calibration = snapshot.copy(
+                        fitting = false,
+                        message = calibrationErrorMessage(t),
+                    ),
                 )
             }
+        }
+    }
+
+    private suspend fun sampleHasGainMap(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input)
+        } ?: return@withContext false
+        try {
+            bitmap.gainmap != null
+        } finally {
+            bitmap.recycle()
         }
     }
 
@@ -182,7 +265,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun resetModels() {
         profiles.clear()
-        _state.value = _state.value.copy(modelReady = false)
+        _state.value = _state.value.copy(modelReady = false, calibratedTargets = emptySet())
+    }
+
+    private fun processErrorMessage(t: Throwable): String {
+        val message = t.message.orEmpty()
+        return when {
+            message.contains("校准模型") -> "缺少与这张截图匹配的校准，请先完成对应方向的校准。"
+            message.contains("清理 HDR gain map") -> "请在设置中开启“清理 Ultra HDR 增益图”后重试。"
+            message.contains("HDR_TO_SDR") -> "暂不支持这种 Ultra HDR 图片。"
+            message.contains("gain map", ignoreCase = true) && message.contains("未得到") ->
+                "当前无法安全处理这张 Ultra HDR 图片。"
+            message.contains("gain map", ignoreCase = true) &&
+                (message.contains("尺寸已变化") || message.contains("通道布局已变化")) ->
+                "这张 Ultra HDR 图片与当前校准不匹配，请重新完成对应方向的 HDR 校准。"
+            message.contains("无法解码") -> "无法读取这张图片。"
+            message.contains("无法创建") -> "无法处理这张图片。"
+            else -> "处理失败，请重试。"
+        }
+    }
+
+    private fun calibrationErrorMessage(t: Throwable): String {
+        val message = t.message.orEmpty()
+        return when {
+            message.contains("identical dimensions") -> "6 张截图尺寸不一致，请重新校准。"
+            message.contains("No verified OPlus beta watermark pixels found") ->
+                "没有检测到可验证的系统水印，请重新截取 6 张灰阶截图。"
+            message.contains("Unable to decode") ||
+                message.contains("Unsupported calibration image") ||
+                message.contains("Unable to open") ->
+                "无法读取校准截图，请重新选择。"
+            message.startsWith("截图方向与") -> "截图方向不一致，请按当前方向重新校准。"
+            else -> "校准失败，请重新截取 6 张截图。"
+        }
     }
 
     private fun updateQueue(uri: Uri, transform: (QueueItem) -> QueueItem) {

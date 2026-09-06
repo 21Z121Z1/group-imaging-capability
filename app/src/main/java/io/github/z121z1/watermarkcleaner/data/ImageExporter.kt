@@ -34,8 +34,12 @@ class ImageExporter(
             ?: error("无法创建媒体库输出")
         try {
             resolver.openOutputStream(uri, "w")?.use { out ->
+                // Deliberate post-process, not merely an output-format choice: the JPEG quantizer
+                // suppresses sub-code-value residuals left by the inverse watermark composite.
+                // When bitmap carries a Gainmap, Android's Bitmap JPEG encoder emits Ultra HDR
+                // JPEG_R and encodes both the SDR base and attached gain map at this quality.
                 check(bitmap.compress(Bitmap.CompressFormat.JPEG, settings.jpegQuality, out)) {
-                    "JPEG 编码失败"
+                    "JPEG / Ultra HDR JPEG_R 编码失败"
                 }
             } ?: error("无法打开媒体库输出")
             resolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
@@ -54,7 +58,7 @@ class ImageExporter(
         try {
             resolver.openOutputStream(uri, "w")?.use { out ->
                 check(bitmap.compress(Bitmap.CompressFormat.JPEG, settings.jpegQuality, out)) {
-                    "JPEG 编码失败"
+                    "JPEG / Ultra HDR JPEG_R 编码失败"
                 }
             } ?: error("无法写入自定义目录")
             return uri

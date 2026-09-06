@@ -29,11 +29,11 @@ fun WatermarkCleanerTheme(content: @Composable () -> Unit) {
         else -> expressiveLightColorScheme()
     }
     val shapes = Shapes(
+        small = RoundedCornerShape(12.dp),
         medium = RoundedCornerShape(20.dp),
         large = RoundedCornerShape(28.dp),
         largeIncreased = RoundedCornerShape(36.dp),
         extraLarge = RoundedCornerShape(44.dp),
     )
-    // MaterialExpressiveTheme supplies MotionScheme.expressive() by default.
     MaterialExpressiveTheme(colorScheme = colorScheme, shapes = shapes, content = content)
 }
